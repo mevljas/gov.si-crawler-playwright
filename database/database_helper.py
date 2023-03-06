@@ -1,17 +1,17 @@
+import logging
 import os
 
-import asyncpg
 from sqlalchemy.ext.asyncio import create_async_engine
 
 
-# Connect to the database.
+# Create database connection.
 def create_database_engine():
-    print('Creating ORM engine.')
+    logging.debug('Creating ORM engine.')
     engine = create_async_engine(f"postgresql+asyncpg://"
                                  f"{os.getenv('POSTGRES_USER')}:"
                                  f"{os.getenv('POSTGRES_PASSWORD')}@localhost:5432/"
                                  f"{os.getenv('POSTGRES_DB')}")
-    print('Creating ORM engine finished.')
+    logging.debug('Creating ORM engine finished.')
     return engine
 
 

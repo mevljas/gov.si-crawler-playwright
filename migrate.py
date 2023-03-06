@@ -1,23 +1,23 @@
 import asyncio
 import os
 
-import asyncpg
 from dotenv import load_dotenv
-from sqlalchemy import schema
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+
 from database.database_helper import create_database_engine
 from database.models import meta, DataType, PageType
+import logging
 
 
 # Create ORM models.
 async def create_models(conn):
-    print('Creating ORM modules.')
+    logging.debug('Creating ORM modules.')
     await conn.run_sync(meta.create_all)
-    print('Finished creating ORM modules.')
+    logging.debug('Finished creating ORM modules.')
 
 
 async def seed_default(async_session: async_sessionmaker[AsyncSession]):
-    print('Seeding the database started.')
+    logging.debug('Seeding the database started.')
     async with async_session() as session:
         async with session.begin():
             session.add_all(
@@ -33,12 +33,11 @@ async def seed_default(async_session: async_sessionmaker[AsyncSession]):
                     PageType(code='FRONTIER'),
                 ]
             )
-    print('Seeding the database finished.')
+    logging.debug('Seeding the database finished.')
 
 
-# Project setup.
-async def setup():
-    print('Starting setup.')
+async def main():
+    logging.info('Migration started.')
     load_dotenv()
     engine = create_database_engine()
     # await connect_create_if_not_exists()
@@ -49,18 +48,12 @@ async def setup():
         database = os.getenv('POSTGRES_DB')
         await create_models(conn)
     await seed_default(async_session)
-    print('Finished setup.')
-    return engine, async_session
-
-
-async def main():
-    print('Migration started.')
-    engine, async_session = await setup()
     # for AsyncEngine created in function scope, close and
     # clean-up pooled connections
     await engine.dispose()
-    print('Migration finished.')
+    logging.info('Migration finished.')
 
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.DEBUG)
     asyncio.run(main())
