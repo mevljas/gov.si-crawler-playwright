@@ -1,6 +1,6 @@
 from sqlalchemy import Table, Column, Integer, String, ForeignKey, Text, text, DateTime, \
     LargeBinary, MetaData
-from sqlalchemy.orm import relationship, declarative_base
+from sqlalchemy.orm import relationship, declarative_base, Mapped
 
 meta = MetaData(schema="public")
 Base = declarative_base(metadata=meta)
@@ -31,12 +31,12 @@ class Site(Base):
 class Page(Base):
     __tablename__ = 'page'
 
-    id = Column(Integer, primary_key=True)
-    site_id = Column(ForeignKey('site.id', ondelete='RESTRICT'), index=True)
-    page_type_code = Column(ForeignKey('page_type.code', ondelete='RESTRICT'), index=True)
-    url = Column(String(3000), unique=True)
-    html_content = Column(Text)
-    http_status_code = Column(Integer)
+    id: Mapped[int] = Column(Integer, primary_key=True)
+    site_id: Mapped[int] = Column(ForeignKey('site.id', ondelete='RESTRICT'), index=True)
+    page_type_code: Mapped[String] = Column(ForeignKey('page_type.code', ondelete='RESTRICT'), index=True)
+    url: Mapped[String] = Column(String(3000), unique=True)
+    html_content: Mapped[String] = Column(Text)
+    http_status_code: Mapped[int] = Column(Integer)
     accessed_time = Column(DateTime)
 
     page_type = relationship('PageType')
@@ -47,10 +47,10 @@ class Page(Base):
 class Image(Base):
     __tablename__ = 'image'
 
-    id = Column(Integer, primary_key=True)
-    page_id = Column(ForeignKey('page.id', ondelete='RESTRICT'), index=True)
-    filename = Column(String(255))
-    content_type = Column(String(50))
+    id: Mapped[int] = Column(Integer, primary_key=True)
+    page_id: Mapped[int] = Column(ForeignKey('page.id', ondelete='RESTRICT'), index=True)
+    filename: Mapped[String] = Column(String(255))
+    content_type: Mapped[String] = Column(String(50))
     data = Column(LargeBinary)
     accessed_time = Column(DateTime)
 
@@ -60,18 +60,18 @@ class Image(Base):
 class Link(Base):
     __tablename__ = 'link'
 
-    from_page = Column(ForeignKey('page.id', ondelete='RESTRICT'), primary_key=True, nullable=False,
+    from_page: Mapped[int] = Column(ForeignKey('page.id', ondelete='RESTRICT'), primary_key=True, nullable=False,
                        index=True)
-    to_page = Column(ForeignKey('page.id', ondelete='RESTRICT'), primary_key=True, nullable=False, index=True)
+    to_page: Mapped[int] = Column(ForeignKey('page.id', ondelete='RESTRICT'), primary_key=True, nullable=False, index=True)
     relationship(back_populates="children")
 
 
-class PageDatum(Base):
+class PageData(Base):
     __tablename__ = 'page_data'
 
-    id = Column(Integer, primary_key=True)
-    page_id = Column(ForeignKey('page.id', ondelete='RESTRICT'), index=True)
-    data_type_code = Column(ForeignKey('data_type.code', ondelete='RESTRICT'), index=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
+    page_id: Mapped[int] = Column(ForeignKey('page.id', ondelete='RESTRICT'), index=True)
+    data_type_code: Mapped[String] = Column(ForeignKey('data_type.code', ondelete='RESTRICT'), index=True)
     data = Column(LargeBinary)
 
     data_type = relationship('DataType')
