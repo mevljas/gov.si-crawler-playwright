@@ -15,7 +15,7 @@ Edit **.env** file if necesarry.
 docker-compose up -d
 ```
 
-### Create and user virtual env
+### Create and use virtual env
 ```bash
 pip install virtualenv
 python<version> -m venv <virtual-environment-name>
@@ -32,4 +32,9 @@ pip install -r requirements.txt
 ### Run database migrations
 ```bash
 python migrate.py
+```
+
+## Run the crawler
+```bash
+python main.py
 ```
