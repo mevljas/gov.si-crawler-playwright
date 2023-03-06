@@ -22,7 +22,7 @@ python<version> -m venv <virtual-environment-name>
 source env/bin/activate
 ```
 
-Alternatively you can set up it using Pycharm.
+Alternatively you can set it up using Pycharm.
 ### Install requirements
 
 ```bash
