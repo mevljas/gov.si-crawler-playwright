@@ -1,8 +1,8 @@
-from sqlalchemy import Table, Column, Integer, String, ForeignKey, Text, text, DateTime, \
+from sqlalchemy import Column, Integer, String, ForeignKey, Text, DateTime, \
     LargeBinary, MetaData
 from sqlalchemy.orm import relationship, declarative_base, Mapped
 
-meta = MetaData(schema="public")
+meta = MetaData(schema="crawldb")
 Base = declarative_base(metadata=meta)
 
 

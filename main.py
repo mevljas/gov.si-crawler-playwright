@@ -1,46 +1,10 @@
 import asyncio
-import os
+
 from dotenv import load_dotenv
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
-from helpers.models import meta, DataType, PageType
-
-
-# Connect to the database.
-def create_database_engine():
-    print('Creating ORM engine.')
-    engine = create_async_engine(f"postgresql+asyncpg://"
-                                 f"{os.getenv('POSTGRES_USER')}:"
-                                 f"{os.getenv('POSTGRES_PASSWORD')}@localhost:5432/"
-                                 f"{os.getenv('POSTGRES_DB')}")
-    print('Creating ORM engine finished.')
-    return engine
-
-
-# Create ORM models.
-async def create_models(conn):
-    print('Creating ORM modules.')
-    await conn.run_sync(meta.create_all)
-    print('Finished creating ORM modules.')
-
-
-async def seed_default(async_session: async_sessionmaker[AsyncSession]):
-    async with async_session() as session:
-        async with session.begin():
-            session.add_all(
-                [
-                    DataType(code='PDF'),
-                    DataType(code='DOC'),
-                    DataType(code='DOCX'),
-                    DataType(code='PPT'),
-                    DataType(code='PPTX'),
-                    PageType(code='HTML'),
-                    PageType(code='BINARY'),
-                    PageType(code='DUPLICATE'),
-                    PageType(code='FRONTIER'),
-                ]
-            )
-        # await session.commit()
+from database.database_helper import create_database_engine
+from database.models import meta, DataType, PageType
 
 
 # Project setup.
@@ -51,9 +15,6 @@ async def setup():
     # async_sessionmaker: a factory for new AsyncSession objects.
     # expire_on_commit - don't expire objects after transaction commit
     async_session = async_sessionmaker(engine, expire_on_commit=False)
-    async with engine.begin() as conn:
-        await create_models(conn)
-    await seed_default(async_session)
     print('Finished application setup.')
     return engine, async_session
 
