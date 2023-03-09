@@ -7,8 +7,11 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from database.database_helper import create_database_engine
 
 
-# Project setup.
 async def setup():
+    """
+    Setups all required dependencies.
+    """
+
     logging.info('Starting application setup.')
     load_dotenv()
     engine = create_database_engine()
@@ -20,14 +23,16 @@ async def setup():
 
 
 async def main():
+    logging.basicConfig(level=logging.DEBUG)
     logging.info('Application started.')
     engine, async_session = await setup()
+
     # for AsyncEngine created in function scope, close and
     # clean-up pooled connections
+
     await engine.dispose()
     logging.info('Application finished.')
 
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.DEBUG)
     asyncio.run(main())

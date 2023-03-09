@@ -94,13 +94,12 @@ def crawl(current_url: str):
     save_urls(urls)
 
 
-"""
-Get's verified HTML document and parses out only relevant text, which is then returned
-:param soup - output of BeautifulSoup4 (i.e. validated and parsed HTML)
-"""
-
-
 def extract_text(soup):
+    """
+    Get's verified HTML document and parses out only relevant text, which is then returned
+    :param soup - output of BeautifulSoup4 (i.e. validated and parsed HTML)
+    """
+
     # kill all script and style elements
     for script in soup(["script", "style"]):
         script.extract()
@@ -115,13 +114,12 @@ def extract_text(soup):
     return text
 
 
-"""
-Get's verified HTML document and finds all valid new URL holder elements, parses those URLs and returns them.
-:param soup - output of BeautifulSoup4 (i.e. validated and parsed HTML)
-"""
-
-
 def find_urls(soup, current_url_parsed: ParseResult):
+    """
+    Get's verified HTML document and finds all valid new URL holder elements, parses those URLs and returns them.
+    :param soup - output of BeautifulSoup4 (i.e. validated and parsed HTML)
+    """
+
     # find new URLs in DOM
     # select all valid navigatable elements
     clickables = soup.select('a, [onclick]')
@@ -162,24 +160,20 @@ def find_urls(soup, current_url_parsed: ParseResult):
     return new_urls
 
 
-"""
-Gets the full URL that is return by server in case of shortened URLs with missing schema and host, etc.
-'gov.si' -> 'https://www.gov.si'
-"""
-
-
 def get_real_url_from_shortlink(url: str):
+    """
+    Gets the full URL that is return by server in case of shortened URLs with missing schema and host, etc.
+    'gov.si' -> 'https://www.gov.si'
+    """
     resp = requests.get(url)
     return resp.url
 
 
-"""
-Parameter url could be a full url or just a relative path (e.g. '/users/1', 'about.html', '/home')
-In such cases fill the rest of the URL and return
-"""
-
-
 def fill_url(url: str, current_url_parsed: ParseResult):
+    """
+    Parameter url could be a full url or just a relative path (e.g. '/users/1', 'about.html', '/home')
+    In such cases fill the rest of the URL and return
+    """
     url_parsed = urlparse(url)
     filled_url = url
     # check if full url
@@ -189,26 +183,22 @@ def fill_url(url: str, current_url_parsed: ParseResult):
     return filled_url
 
 
-"""
-Checks if URL is allowed in page's robots.txt
-"""
-
-
 def is_allowed(url: str):
+    """
+    Checks if URL is allowed in page's robots.txt
+    """
     if robotparser is None or url is None:
         return True
     return robotparser.can_fetch(USER_AGENT, url)
 
 
-"""
-Translates URLs into canonical form
-- adds missing schema, host, fix encodings, etc.
-- remove query parameters
-- remove element id selector from end of URL
-"""
-
-
 def canonicalize(urls: set):
+    """
+    Translates URLs into canonical form
+    - adds missing schema, host, fix encodings, etc.
+    - remove query parameters
+    - remove element id selector from end of URL
+    """
     new_urls = set()
     for url in urls:
         u = url_normalize(url)
@@ -218,12 +208,10 @@ def canonicalize(urls: set):
     return new_urls
 
 
-"""
-Save new URLs to frontier
-"""
-
-
 def save_urls(urls: set):
+    """
+    Save new URLs to frontier
+    """
     print("Saving urls...")
     for url in urls:
         # TODO: check if duplicate
