@@ -29,6 +29,11 @@ Alternatively you can set it up using Pycharm.
 pip install -r requirements.txt
 ```
 
+### Install Playwright browsers (chromium, firefox, webkit)
+```bash
+playwright install
+```
+
 ### Run database migrations
 ```bash
 python migrate.py

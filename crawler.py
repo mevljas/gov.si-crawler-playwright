@@ -1,4 +1,5 @@
 import re
+import time
 import requests
 from bs4 import BeautifulSoup
 import urllib.request
@@ -7,15 +8,17 @@ from urllib.parse import ParseResult
 import urllib.robotparser as robotparser
 from url_normalize import url_normalize
 from w3lib.url import url_query_cleaner
+from playwright.sync_api import sync_playwright
 
 USER_AGENT = "fri-wier-besela"
+DOMAIN_DELAY = 5 # seconds
 seed_urls = ['gov.si', 'evem.gov.si', 'e-uprava.gov.si', 'e-prostor.gov.si']
 robotparser = urllib.robotparser.RobotFileParser()
 frontier = []  # keep track of not visited links
 visited_links = set()  # keep track of visited links to avoid crawling them again
 govsi_regex = re.compile(".*\.gov\.si$")  # regex to match URLs with the .gov.si domain
 full_url_regex = re.compile("^http[s]+:\/\/.*\..*\.*")  # regex to match URL structure
- 
+
 """
 Regex to match JS redirect calls in format of e.g.: location.href = "/about.html". 
 The URL is stored in group 3
@@ -27,6 +30,20 @@ Regex to match JS redirect calls in format of e.g.: location.assign('/about.html
 The URL is stored in group 4
 """
 navigation_func_regex = re.compile(".*(.)?location(.href)?.(.*)\([\"\'](.*)[\"\']\)")
+
+def go_to_page(playwright, url: str):
+    chromium = playwright.chromium # or "firefox" or "webkit".
+    # TODO: more efficient would be to open and close browser higher up in stack
+    browser = chromium.launch()
+    page = browser.new_page()
+
+    page.goto(url)
+    page.wait_for_timeout(2000)
+    html = page.content()
+    status = page.request.get(url).status
+
+    browser.close()
+    return (html, status)
 
 def crawl(current_url: str):
     if not full_url_regex.match(current_url):
@@ -48,29 +65,34 @@ def crawl(current_url: str):
     # skip crawling already visited links
     if current_url in visited_links:
         return
-    # TODO: mark as visited in Frontier
-    visited_links.add(current_url)
+
+    # TODO: incorporate delay for fetching pages in domain
+    # TODO: save as column in site table
+    delay = robotparser.crawl_delay(USER_AGENT)
+    if delay is not None:
+        DOMAIN_DELAY = delay
 
     # fetch page
-    # TODO: incorporate check for different file types other than HTML (pdf, docx, etc.)
-    try:
-        with urllib.request.urlopen(current_url) as response:
-            html = response.read().decode('utf-8')
-    except:
-        return  # skip crawling if page can't be accessed
+    # TODO: incorporate check for different file types other than HTML (.pdf, .doc, .docx, .ppt, .pptx)
+    # TODO: check and save http status
+    with sync_playwright() as playwright:
+        (html, status) = go_to_page(playwright, current_url)
 
     # extract any relevant data from the page here, using BeautifulSoup
     soup = BeautifulSoup(html, "html.parser")
     content = extract_text(soup)
     urls = find_urls(soup, current_url_parsed)
 
+    # TODO: check for duplicate page in Frontier
+    # TODO: mark as visited in Frontier
+    visited_links.add(current_url)
     # TODO: save page content
     print(content)
     # TODO: save new URLs
     save_urls(urls)
 
 """
-Get's verified HTMl document and parses out only relevant text, which is then returned
+Get's verified HTML document and parses out only relevant text, which is then returned
 :param soup - output of BeautifulSoup4 (i.e. validated and parsed HTML)
 """
 def extract_text(soup):
