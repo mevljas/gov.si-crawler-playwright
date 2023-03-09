@@ -50,10 +50,10 @@ async def go_to_page(playwright, url: str):
 
 
 async def crawl(current_url: str):
-    logging.info(f'Crawling url ${str}.')
+    logging.info(f'Crawling url {current_url}.')
     if not full_url_regex.match(current_url):
         current_url = get_real_url_from_shortlink(current_url)
-    logging.info('Url has to be cleaned.')
+    logging.debug('Url has to be cleaned.')
     current_url_parsed: ParseResult = urlparse(current_url)
 
     # skip crawling if URL is not from a .gov.si domain

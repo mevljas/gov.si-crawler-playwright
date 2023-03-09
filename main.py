@@ -34,6 +34,9 @@ async def main():
     # Run the spider.
     await crawl('https://www.gov.si')
 
+    # Clean database manager.
+    await database_manager.cleanup()
+
     logging.info('Application finished.')
 
 
