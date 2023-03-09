@@ -1,20 +1,20 @@
 import logging
 import re
 import urllib.request
-import urllib.robotparser as robotparser
+import urllib.robotparser
 from urllib.parse import ParseResult
 from urllib.parse import urlparse
 
 import requests
 from bs4 import BeautifulSoup
-from playwright.async_api import async_playwright
+from playwright.async_api import async_playwright, Page
 from url_normalize import url_normalize
 from w3lib.url import url_query_cleaner
 
 USER_AGENT = "fri-wier-besela"
 DOMAIN_DELAY = 5  # seconds
 seed_urls = ['gov.si', 'evem.gov.si', 'e-uprava.gov.si', 'e-prostor.gov.si']
-robotparser = urllib.robotparser.RobotFileParser()
+robot_file_parser = urllib.robotparser.RobotFileParser()
 frontier = []  # keep track of not visited links
 visited_links = set()  # keep track of visited links to avoid crawling them again
 govsi_regex = re.compile(".*\.gov\.si$")  # regex to match URLs with the .gov.si domain
@@ -33,7 +33,13 @@ The URL is stored in group 4
 navigation_func_regex = re.compile(".*(.)?location(.href)?.(.*)\([\"\'](.*)[\"\']\)")
 
 
-async def go_to_page( url: str, page):
+async def go_to_page(url: str, page: Page) -> (str, int):
+    """
+    Requests and downloads a specific webpage.
+    :param url: Webpage url to be crawled.
+    :param page: Browser page.
+    :return: html, status
+    """
     response = await page.goto(url)
     await page.wait_for_timeout(2000)
     html = await page.content()
@@ -42,7 +48,13 @@ async def go_to_page( url: str, page):
     return html, status
 
 
-async def crawl(current_url: str, playwright, page):
+async def crawl(current_url: str, page: Page):
+    """
+    Crawls the provided current_url.
+    :param current_url: Url to be crawled.
+    :param page: Browser page.
+    :return:
+    """
     logging.info(f'Crawling url {current_url}.')
     if not full_url_regex.match(current_url):
         current_url = get_real_url_from_shortlink(current_url)
@@ -56,8 +68,8 @@ async def crawl(current_url: str, playwright, page):
 
     # check if URL is allowed by robots.txt rules
     robots_url = current_url_parsed.scheme + '://' + current_url_parsed.netloc + '/robots.txt'
-    robotparser.set_url(robots_url)
-    robotparser.read()
+    robot_file_parser.set_url(robots_url)
+    robot_file_parser.read()
     if not is_allowed(current_url):
         logging.info('Url is not allowed in robots')
         return
@@ -70,7 +82,7 @@ async def crawl(current_url: str, playwright, page):
 
     # TODO: incorporate delay for fetching pages in domain
     # TODO: save as column in site table
-    delay = robotparser.crawl_delay(USER_AGENT)
+    delay = robot_file_parser.crawl_delay(USER_AGENT)
     if delay is not None:
         DOMAIN_DELAY = delay
 
@@ -78,12 +90,12 @@ async def crawl(current_url: str, playwright, page):
     # TODO: incorporate check for different file types other than HTML (.pdf, .doc, .docx, .ppt, .pptx)
     # TODO: check and save http status
 
-    (html, status) = await go_to_page(url= current_url, page=page)
+    (html, status) = await go_to_page(url=current_url, page=page)
 
     # extract any relevant data from the page here, using BeautifulSoup
-    soup = BeautifulSoup(html, "html.parser")
-    content = extract_text(soup)
-    urls = find_urls(soup, current_url_parsed)
+    beautiful_soup = BeautifulSoup(html, "html.parser")
+    content = extract_text(beautiful_soup)
+    urls = find_urls(beautiful_soup, current_url_parsed)
 
     # TODO: check for duplicate page in Frontier
     # TODO: mark as visited in Frontier
@@ -94,7 +106,7 @@ async def crawl(current_url: str, playwright, page):
     save_urls(urls)
 
 
-def extract_text(soup):
+def extract_text(beautiful_soup: BeautifulSoup) -> str:
     """
     Get's verified HTML document and parses out only relevant text, which is then returned
     :param soup - output of BeautifulSoup4 (i.e. validated and parsed HTML)
@@ -102,10 +114,10 @@ def extract_text(soup):
     logging.debug(f'Extracting text from the page.')
 
     # kill all script and style elements
-    for script in soup(["script", "style"]):
+    for script in beautiful_soup(["script", "style"]):
         script.extract()
     # get text
-    text = soup.get_text()
+    text = beautiful_soup.get_text()
     # break into lines and remove leading and trailing space on each
     lines = (line.strip() for line in text.splitlines())
     # break multi-headlines into a line each
@@ -115,7 +127,7 @@ def extract_text(soup):
     return text
 
 
-def find_urls(soup, current_url_parsed: ParseResult):
+def find_urls(beautiful_soup: BeautifulSoup, current_url_parsed: ParseResult):
     """
     Get's verified HTML document and finds all valid new URL holder elements, parses those URLs and returns them.
     :param soup - output of BeautifulSoup4 (i.e. validated and parsed HTML)
@@ -124,7 +136,7 @@ def find_urls(soup, current_url_parsed: ParseResult):
 
     # find new URLs in DOM
     # select all valid navigatable elements
-    clickables = soup.select('a, [onclick]')
+    clickables = beautiful_soup.select('a, [onclick]')
     new_urls = set()
     for element in clickables:
         url = None
@@ -150,7 +162,7 @@ def find_urls(soup, current_url_parsed: ParseResult):
 
     # find URLs from all sitemaps
     # check for sitemap.xml file and return the content as list(), otherwise None
-    sitemap_urls = robotparser.site_maps()
+    sitemap_urls = robot_file_parser.site_maps()
     if sitemap_urls is not None:
         for sitemap_url in sitemap_urls:
             # TODO: parse/fetch found sitemaps and add their URLs
@@ -192,9 +204,9 @@ def is_allowed(url: str):
     Checks if URL is allowed in page's robots.txt
     """
     logging.debug(f'Checkin whether url {url} is allowed.')
-    if robotparser is None or url is None:
+    if robot_file_parser is None or url is None:
         return True
-    return robotparser.can_fetch(USER_AGENT, url)
+    return robot_file_parser.can_fetch(USER_AGENT, url)
 
 
 def canonicalize(urls: set):
@@ -223,18 +235,24 @@ def save_urls(urls: set):
         # TODO: check if duplicate
         # TODO: add to frontier
         frontier.append(url)
-        print(url)
+        logging.info(f'Adding url {url} to frontier.')
 
 
 async def setup_crawler(start_url: str):
+    """
+    Setups the playwright library and starts crawling.
+    :param start_url: First url to be crawled
+    """
     logging.info(f'Starting the crawler with an url {start_url}.')
     async with async_playwright() as playwright:
         chromium = playwright.chromium  # or "firefox" or "webkit".
         browser = await chromium.launch()
         page = await browser.new_page()
-        await crawl(playwright=playwright,current_url=start_url, page=page)
+        await crawl(current_url=start_url, page=page)
 
-    await browser.close()
+    # await browser.close()
+    # browser.close() is not awaited, because it hangs for some reason :/
+    browser.close()
     logging.info(f'Crawler finished.')
 
 # TODO: incorporate seed URLs
