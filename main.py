@@ -1,36 +1,39 @@
 import asyncio
 import logging
+import os
 
 from dotenv import load_dotenv
-from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from database.database_helper import create_database_engine
+from crawler import crawl
+from database.database_manager import DatabaseManager
 
 
-async def setup():
+def load_env() -> (str, str, str):
     """
-    Setups all required dependencies.
+    Load ENV variables.
+    :return: postgres_user, postgres_password, postgres_db
     """
-
-    logging.info('Starting application setup.')
     load_dotenv()
-    engine = create_database_engine()
-    # async_sessionmaker: a factory for new AsyncSession objects.
-    # expire_on_commit - don't expire objects after transaction commit
-    async_session = async_sessionmaker(engine, expire_on_commit=False)
-    logging.info('Finished application setup.')
-    return engine, async_session
+    postgres_user = os.getenv('POSTGRES_USER')
+    postgres_password = os.getenv('POSTGRES_PASSWORD')
+    postgres_db = os.getenv('POSTGRES_DB')
+    return postgres_user, postgres_password, postgres_db
 
 
 async def main():
     logging.basicConfig(level=logging.DEBUG)
     logging.info('Application started.')
-    engine, async_session = await setup()
 
-    # for AsyncEngine created in function scope, close and
-    # clean-up pooled connections
+    # Load env variables.
+    postgres_user, postgres_password, postgres_db = load_env()
 
-    await engine.dispose()
+    # Setup database manager.
+    database_manager = DatabaseManager()
+    database_manager.create_database_engine(user=postgres_user, password=postgres_password, db=postgres_db)
+
+    # Run the spider.
+    await crawl('https://www.gov.si')
+
     logging.info('Application finished.')
 
 

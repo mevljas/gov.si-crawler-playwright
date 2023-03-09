@@ -4,7 +4,7 @@ import os
 from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
-from database.database_helper import create_database_engine
+from database.database_manager import create_database_engine
 from database.models import meta, DataType, PageType
 import logging
 
