@@ -4,7 +4,7 @@ import os
 
 from dotenv import load_dotenv
 
-from crawler import crawl
+from crawler import crawl, setup_crawler
 from database.database_manager import DatabaseManager
 
 
@@ -32,7 +32,7 @@ async def main():
     database_manager.create_database_engine(user=postgres_user, password=postgres_password, db=postgres_db)
 
     # Run the spider.
-    await crawl('https://www.gov.si')
+    await setup_crawler(start_url='https://www.gov.si')
 
     # Clean database manager.
     await database_manager.cleanup()

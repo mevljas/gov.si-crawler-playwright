@@ -1,16 +1,15 @@
 import logging
 import re
-import time
+import urllib.request
+import urllib.robotparser as robotparser
+from urllib.parse import ParseResult
+from urllib.parse import urlparse
+
 import requests
 from bs4 import BeautifulSoup
-import urllib.request
-from urllib.parse import urlparse
-from urllib.parse import ParseResult
-import urllib.robotparser as robotparser
+from playwright.async_api import async_playwright
 from url_normalize import url_normalize
 from w3lib.url import url_query_cleaner
-import asyncio
-from playwright.async_api import async_playwright
 
 USER_AGENT = "fri-wier-besela"
 DOMAIN_DELAY = 5  # seconds
@@ -34,22 +33,16 @@ The URL is stored in group 4
 navigation_func_regex = re.compile(".*(.)?location(.href)?.(.*)\([\"\'](.*)[\"\']\)")
 
 
-async def go_to_page(playwright, url: str):
-    chromium = playwright.chromium  # or "firefox" or "webkit".
-    # TODO: more efficient would be to open and close browser higher up in stack
-    browser = await chromium.launch()
-    page = await browser.new_page()
-
+async def go_to_page( url: str, page):
     response = await page.goto(url)
     await page.wait_for_timeout(2000)
     html = await page.content()
     status = response.status
 
-    await browser.close()
     return html, status
 
 
-async def crawl(current_url: str):
+async def crawl(current_url: str, playwright, page):
     logging.info(f'Crawling url {current_url}.')
     if not full_url_regex.match(current_url):
         current_url = get_real_url_from_shortlink(current_url)
@@ -84,8 +77,8 @@ async def crawl(current_url: str):
     # fetch page
     # TODO: incorporate check for different file types other than HTML (.pdf, .doc, .docx, .ppt, .pptx)
     # TODO: check and save http status
-    async with async_playwright() as playwright:
-        (html, status) = await go_to_page(playwright, current_url)
+
+    (html, status) = await go_to_page(url= current_url, page=page)
 
     # extract any relevant data from the page here, using BeautifulSoup
     soup = BeautifulSoup(html, "html.parser")
@@ -231,6 +224,18 @@ def save_urls(urls: set):
         # TODO: add to frontier
         frontier.append(url)
         print(url)
+
+
+async def setup_crawler(start_url: str):
+    logging.info(f'Starting the crawler with an url {start_url}.')
+    async with async_playwright() as playwright:
+        chromium = playwright.chromium  # or "firefox" or "webkit".
+        browser = await chromium.launch()
+        page = await browser.new_page()
+        await crawl(playwright=playwright,current_url=start_url, page=page)
+
+    await browser.close()
+    logging.info(f'Crawler finished.')
 
 # TODO: incorporate seed URLs
 # TODO: implement multi-threading with database locking
