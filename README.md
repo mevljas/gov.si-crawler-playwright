@@ -12,7 +12,7 @@ Edit **.env** file if necesarry.
 ### Run Docker Postgres database
 
 ```bash
-docker-compose up -d
+docker-compose up -d ieps-db
 ```
 
 ### Create and use virtual env
@@ -43,3 +43,12 @@ python migrate.py
 ```bash
 python main.py
 ```
+
+## PgAdmin (optional)
+You can run PgAdmin Docker container with the following command:
+```bash
+docker-compose up -d pgadmin
+```
+
+Access the pgadmin4 via your favorite web browser by visiting the [URL](http://localhost:5050/). 
+Use the admin@admin.com as the email address and root as the password to log in.
