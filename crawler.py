@@ -11,7 +11,7 @@ from w3lib.url import url_query_cleaner
 from playwright.sync_api import sync_playwright
 
 USER_AGENT = "fri-wier-besela"
-DOMAIN_DELAY = 5 # seconds
+DOMAIN_DELAY = 5  # seconds
 seed_urls = ['gov.si', 'evem.gov.si', 'e-uprava.gov.si', 'e-prostor.gov.si']
 robotparser = urllib.robotparser.RobotFileParser()
 frontier = []  # keep track of not visited links
@@ -24,15 +24,16 @@ Regex to match JS redirect calls in format of e.g.: location.href = "/about.html
 The URL is stored in group 3
 """
 navigation_assign_regex = re.compile(".*(.)?location(.href)?\ =\ [\"\'](.*)[\"\']")
- 
+
 """
 Regex to match JS redirect calls in format of e.g.: location.assign('/about.html'). 
 The URL is stored in group 4
 """
 navigation_func_regex = re.compile(".*(.)?location(.href)?.(.*)\([\"\'](.*)[\"\']\)")
 
+
 def go_to_page(playwright, url: str):
-    chromium = playwright.chromium # or "firefox" or "webkit".
+    chromium = playwright.chromium  # or "firefox" or "webkit".
     # TODO: more efficient would be to open and close browser higher up in stack
     browser = chromium.launch()
     page = browser.new_page()
@@ -44,6 +45,7 @@ def go_to_page(playwright, url: str):
 
     browser.close()
     return (html, status)
+
 
 def crawl(current_url: str):
     if not full_url_regex.match(current_url):
@@ -91,10 +93,13 @@ def crawl(current_url: str):
     # TODO: save new URLs
     save_urls(urls)
 
+
 """
 Get's verified HTML document and parses out only relevant text, which is then returned
 :param soup - output of BeautifulSoup4 (i.e. validated and parsed HTML)
 """
+
+
 def extract_text(soup):
     # kill all script and style elements
     for script in soup(["script", "style"]):
@@ -109,10 +114,13 @@ def extract_text(soup):
     text = '\n'.join(chunk for chunk in chunks if chunk)
     return text
 
+
 """
 Get's verified HTML document and finds all valid new URL holder elements, parses those URLs and returns them.
 :param soup - output of BeautifulSoup4 (i.e. validated and parsed HTML)
 """
+
+
 def find_urls(soup, current_url_parsed: ParseResult):
     # find new URLs in DOM
     # select all valid navigatable elements
@@ -153,18 +161,24 @@ def find_urls(soup, current_url_parsed: ParseResult):
 
     return new_urls
 
+
 """
 Gets the full URL that is return by server in case of shortened URLs with missing schema and host, etc.
 'gov.si' -> 'https://www.gov.si'
 """
+
+
 def get_real_url_from_shortlink(url: str):
     resp = requests.get(url)
     return resp.url
+
 
 """
 Parameter url could be a full url or just a relative path (e.g. '/users/1', 'about.html', '/home')
 In such cases fill the rest of the URL and return
 """
+
+
 def fill_url(url: str, current_url_parsed: ParseResult):
     url_parsed = urlparse(url)
     filled_url = url
@@ -174,13 +188,17 @@ def fill_url(url: str, current_url_parsed: ParseResult):
         filled_url = current_url_parsed.scheme + '://' + current_url_parsed.netloc + url
     return filled_url
 
+
 """
 Checks if URL is allowed in page's robots.txt
 """
+
+
 def is_allowed(url: str):
     if robotparser is None or url is None:
         return True
     return robotparser.can_fetch(USER_AGENT, url)
+
 
 """
 Translates URLs into canonical form
@@ -188,6 +206,8 @@ Translates URLs into canonical form
 - remove query parameters
 - remove element id selector from end of URL
 """
+
+
 def canonicalize(urls: set):
     new_urls = set()
     for url in urls:
@@ -197,9 +217,12 @@ def canonicalize(urls: set):
         new_urls.add(u)
     return new_urls
 
+
 """
 Save new URLs to frontier
 """
+
+
 def save_urls(urls: set):
     print("Saving urls...")
     for url in urls:
@@ -207,6 +230,7 @@ def save_urls(urls: set):
         # TODO: add to frontier
         frontier.append(url)
         print(url)
+
 
 # TODO: incorporate seed URLs
 # TODO: implement multi-threading with database locking
