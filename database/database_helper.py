@@ -3,8 +3,11 @@ import os
 
 from sqlalchemy.ext.asyncio import create_async_engine
 
+"""
+Creates and returns Sqlalchemy database engine.
+"""
 
-# Create database connection.
+
 def create_database_engine():
     logging.debug('Creating ORM engine.')
     engine = create_async_engine(f"postgresql+asyncpg://"
@@ -13,5 +16,3 @@ def create_database_engine():
                                  f"{os.getenv('POSTGRES_DB')}")
     logging.debug('Creating ORM engine finished.')
     return engine
-
-

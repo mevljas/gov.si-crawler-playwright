@@ -8,12 +8,20 @@ from database.database_helper import create_database_engine
 from database.models import meta, DataType, PageType
 import logging
 
+"""
+Creates all required database tables from the declared models.
+"""
 
-# Create ORM models.
+
 async def create_models(conn):
     logging.debug('Creating ORM modules.')
     await conn.run_sync(meta.create_all)
     logging.debug('Finished creating ORM modules.')
+
+
+"""
+Inserts required started data to the database.
+"""
 
 
 async def seed_default(async_session: async_sessionmaker[AsyncSession]):
