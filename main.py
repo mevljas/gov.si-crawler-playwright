@@ -4,7 +4,7 @@ import os
 
 from dotenv import load_dotenv
 
-from crawler import crawl_url, start_crawler
+from crawler import start_crawler
 from database.database_manager import DatabaseManager
 
 
@@ -32,7 +32,28 @@ async def main():
     database_manager.create_database_engine(user=postgres_user, password=postgres_password, db=postgres_db)
 
     # Run the spider.
-    await start_crawler(start_url='https://www.gov.si')
+
+    # TODO: incorporate seed URLs
+    # TODO: implement multi-threading with database locking
+    # start crawling from each seed URL
+    # for seed_url in seed_urls:
+    #    crawl(seed_url)
+
+    # Test with robots.txt and large sitemap. 
+    # !!! It takes 1 HOUR to build whole URL tree !!!
+    # await start_crawler(start_url='https://www.gov.si')
+
+    # Test with redirect and no robots.txt, but with hidden sitemap.xml
+    # It takes 2 minutes to build whole URL tree
+    # await start_crawler(start_url='https://evem.gov.si')
+
+    # Test with robots.txt and sitemap url, but sitemap is 404 not found page
+    # await start_crawler(start_url='https://e-uprava.gov.si')
+
+    # Test with robots.txt and small sitemap. 
+    # It takes 20 seconds to build the URL tree
+    # !!! The sitemap has irregular sitemap URLs !!! 
+    await start_crawler(start_url='https://e-prostor.gov.si')
 
     # Clean database manager.
     await database_manager.cleanup()

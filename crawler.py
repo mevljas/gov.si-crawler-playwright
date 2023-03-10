@@ -26,6 +26,8 @@ async def crawl_url(current_url: str, page: Page, robot_file_parser: RobotFilePa
     :return:
     """
     logging.info(f'Crawling url {current_url}.')
+    
+    # just in case fill in any shortened URLs
     if not full_url_regex.match(current_url):
         current_url = CrawlerHelper.get_real_url_from_shortlink(current_url)
     logging.debug('Url has to be cleaned.')
@@ -36,10 +38,12 @@ async def crawl_url(current_url: str, page: Page, robot_file_parser: RobotFilePa
         logging.info('Url skipped because it is not from .gov.si.')
         return
 
-    # check if URL is allowed by robots.txt rules
+    # get robots.txt
     robots_url = current_url_parsed.scheme + '://' + current_url_parsed.netloc + '/robots.txt'
     robot_file_parser.set_url(robots_url)
     robot_file_parser.read()
+
+    # check if URL is allowed by robots.txt rules
     if not CrawlerHelper.is_allowed(current_url, robot_file_parser=robot_file_parser):
         logging.info('Url is not allowed in robots')
         return
@@ -51,21 +55,29 @@ async def crawl_url(current_url: str, page: Page, robot_file_parser: RobotFilePa
         return
 
     # TODO: incorporate delay for fetching pages in domain
-    # TODO: save as column in site table
+    # TODO: save as column in site table?
     delay = robot_file_parser.crawl_delay(USER_AGENT)
     if delay is not None:
-        DOMAIN_DELAY = delay
+        # TODO: set delay in crawler instance?
+        delay
 
     # fetch page
     # TODO: incorporate check for different file types other than HTML (.pdf, .doc, .docx, .ppt, .pptx)
     # TODO: check and save http status
-
     (html, status) = await CrawlerHelper.get_page(url=current_url, page=page)
 
     # extract any relevant data from the page here, using BeautifulSoup
     beautiful_soup = BeautifulSoup(html, "html.parser")
+
+    # get content
     content = CrawlerHelper.extract_text(beautiful_soup)
-    urls = CrawlerHelper.find_links(beautiful_soup, current_url_parsed, robot_file_parser=robot_file_parser)
+
+    # get URLs
+    page_urls = CrawlerHelper.find_links(beautiful_soup, current_url_parsed, robot_file_parser=robot_file_parser)
+    sitemap_urls = CrawlerHelper.find_sitemap_links(current_url_parsed, robot_file_parser=robot_file_parser)
+
+    # combine DOM and sitemap URLs
+    all_urls = page_urls.union(sitemap_urls)
 
     # TODO: check for duplicate page in Frontier
     # TODO: mark as visited in Frontier
@@ -73,7 +85,7 @@ async def crawl_url(current_url: str, page: Page, robot_file_parser: RobotFilePa
     # TODO: save page content
     # print(content)
     # TODO: save new URLs
-    CrawlerHelper.save_urls(urls=urls, frontier=frontier)
+    CrawlerHelper.save_urls(urls=all_urls, frontier=frontier)
 
 
 async def start_crawler(start_url: str):
@@ -89,13 +101,7 @@ async def start_crawler(start_url: str):
         page = await browser.new_page()
         await crawl_url(current_url=start_url, page=page, robot_file_parser=robot_file_parser)
 
-    # await browser.close()
-    # browser.close() is not awaited, because it hangs for some reason :/
-    browser.close()
+        await browser.close()
+        # browser.close() is not awaited, because it hangs for some reason :/
+        # browser.close()
     logging.info(f'Crawler finished.')
-
-# TODO: incorporate seed URLs
-# TODO: implement multi-threading with database locking
-# start crawling from each seed URL
-# for seed_url in seed_urls:
-#    crawl(seed_url)
