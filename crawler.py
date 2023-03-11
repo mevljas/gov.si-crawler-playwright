@@ -38,9 +38,14 @@ async def crawl_url(current_url: str, page: Page, robot_file_parser: RobotFilePa
     # Get url domain
     domain = current_url_parsed.netloc
 
+    # Get site's ip address
     ip = CrawlerHelper.get_site_ip(hostname=domain)
 
-    # Get wait time between calls to the same domain
+    # If the DNS request failed it probably doesn't work.
+    if ip is None:
+        return
+
+    # Get wait time between calls to the same domain and ip address
     wait_time = CrawlerHelper.get_site_wait_time(domain_available_times=domain_available_times, domain=domain, ip_available_times=ip_available_times, ip=ip)
     if wait_time > 0:
         logger.debug(f'Required waiting time for the domain {domain} is {wait_time} seconds.')
@@ -124,6 +129,10 @@ async def start_crawler():
                     logger.critical(f'Crawling url {url} failed with an error {e}.')
                 already_visited_links.add(url)
                 seed_urls.remove(url)
+                logger.info('###########################################################################')
+                logger.info(f'Already visited {len(already_visited_links)} unique links.')
+                logger.info(f'Will visit additional {len(seed_urls)} unique links.')
+                logger.info('###########################################################################')
 
         await browser.close()
     logger.info(f'Crawler finished.')
