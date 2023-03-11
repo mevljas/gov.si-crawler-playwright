@@ -9,7 +9,7 @@ from urllib.robotparser import RobotFileParser
 from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright, Page
 
-from crawler_helper.constants import full_url_regex, govsi_regex, USER_AGENT
+from crawler_helper.constants import full_url_regex, USER_AGENT
 from crawler_helper.crawler_helper import CrawlerHelper
 
 visited_links = set()  # keep track of visited links to avoid crawling them again
@@ -29,12 +29,12 @@ async def crawl_url(current_url: str, page: Page, robot_file_parser: RobotFilePa
     
     # just in case fill in any shortened URLs
     if not full_url_regex.match(current_url):
+        logging.debug('Url has to be cleaned.')
         current_url = CrawlerHelper.get_real_url_from_shortlink(current_url)
-    logging.debug('Url has to be cleaned.')
     current_url_parsed: ParseResult = urlparse(current_url)
 
     # skip crawling if URL is not from a .gov.si domain
-    if not govsi_regex.match(current_url_parsed.netloc):
+    if not CrawlerHelper.is_allowed_domain(url=current_url_parsed):
         logging.info('Url skipped because it is not from .gov.si.')
         return
 
@@ -102,6 +102,4 @@ async def start_crawler(start_url: str):
         await crawl_url(current_url=start_url, page=page, robot_file_parser=robot_file_parser)
 
         await browser.close()
-        # browser.close() is not awaited, because it hangs for some reason :/
-        # browser.close()
     logging.info(f'Crawler finished.')

@@ -10,11 +10,11 @@ import requests
 import re
 import time
 
-from crawler_helper.constants import navigation_assign_regex, navigation_func_regex, USER_AGENT
+from crawler_helper.constants import navigation_assign_regex, navigation_func_regex, USER_AGENT, govsi_regex
 
 
 class CrawlerHelper:
-    domain_delay = 5 # seconds
+    domain_delay = 5  # seconds
 
     @staticmethod
     async def get_page(url: str, page: Page) -> (str, int):
@@ -53,7 +53,7 @@ class CrawlerHelper:
         return text
 
     @staticmethod
-    def find_links(beautiful_soup: BeautifulSoup, current_url: ParseResult, robot_file_parser: RobotFileParser):
+    def find_links(beautiful_soup: BeautifulSoup, current_url: ParseResult, robot_file_parser: RobotFileParser) ->  set[str]:
         """
         Get's verified HTML document and finds all valid new URL holder elements, parses those URLs and returns them.
         :param robot_file_parser: parser for robots.txt
@@ -82,7 +82,7 @@ class CrawlerHelper:
                     url = re.search(navigation_func_regex, onclick).group(4)
             else:
                 continue
-            
+
             # continue if no valid url was found
             if url is None: continue
 
@@ -97,9 +97,9 @@ class CrawlerHelper:
         new_urls = CrawlerHelper.canonicalize(new_urls)
 
         return new_urls
-    
+
     @staticmethod
-    def find_sitemap_links(current_url: ParseResult, robot_file_parser: RobotFileParser):
+    def find_sitemap_links(current_url: ParseResult, robot_file_parser: RobotFileParser) ->  set[str]:
         """
         Checks for sitemap.xml file and recursively traverses the tree to find all URLs.
         :param robot_file_parser: parser for robots.txt
@@ -113,19 +113,19 @@ class CrawlerHelper:
         if sitemaps is not None:
             for sitemap in sitemaps:
                 # parse/fetch found sitemaps and add their URLs
-                new_urls_sitemap.update(CrawlerHelper.get_sitemap_urls(CrawlerHelper, sitemap)) 
+                new_urls_sitemap.update(CrawlerHelper.get_sitemap_urls(CrawlerHelper, sitemap))
         else:
             # even though sitemap is not in robots.txt, try to find it in root
             sitemap = current_url.scheme + '://' + current_url.netloc + '/sitemap.xml'
             new_urls_sitemap.update(CrawlerHelper.get_sitemap_urls(CrawlerHelper, sitemap))
-        
+
         # translate URLs to canonical form
         new_urls_sitemap = CrawlerHelper.canonicalize(new_urls_sitemap)
 
         return new_urls_sitemap
 
     @staticmethod
-    def get_sitemap_urls(self, sitemap_url, new_urls=None):
+    def get_sitemap_urls(self, sitemap_url, new_urls=None) -> set[str]:
         """
         From given root sitemap url, visting all .xml child routes and return leaf nodes as a new set of URLs
         This is a recursive function.
@@ -135,7 +135,7 @@ class CrawlerHelper:
         sitemap = requests.get(sitemap_url)
         if sitemap.status_code != 200:
             return new_urls if new_urls != None else set()
-        
+
         try:
             xml = BeautifulSoup(sitemap.content, "xml")
         except:
@@ -164,7 +164,7 @@ class CrawlerHelper:
         return None
 
     @staticmethod
-    def canonicalize(urls: set):
+    def canonicalize(urls: set) -> set[str]:
         """
         Translates URLs into canonical form
         - adds missing schema, host, fix encodings, etc.
@@ -174,21 +174,21 @@ class CrawlerHelper:
         logging.debug(f'Translating urls into a canonical form.')
         new_urls = set()
         for url in urls:
-            u = url_normalize(url) # general form fixes
-            u = url_query_cleaner(u) # remove query params
-            u = re.sub(r'#.*$', '', u) # remove fragment
+            u = url_normalize(url)  # general form fixes
+            u = url_query_cleaner(u)  # remove query params
+            u = re.sub(r'#.*$', '', u)  # remove fragment
             # add 'www' subdomain
             if 'www' not in u and '://' in u:
                 protocol_end = u.index('://') + 3
                 u = u[:protocol_end] + 'www.' + url[protocol_end:]
             # end with / if not a filetype
-            if not(CrawlerHelper.has_file_extension(u) or u.endswith('/')):
+            if not (CrawlerHelper.has_file_extension(u) or u.endswith('/')):
                 u += '/'
             new_urls.add(u)
         return new_urls
 
     @staticmethod
-    def has_file_extension(url):
+    def has_file_extension(url) -> bool:
         """
         Checks if URL end with a file extenstion like: .html, .pdf, .txt, etc.
         """
@@ -197,7 +197,7 @@ class CrawlerHelper:
         return bool(re.match(pattern, url))
 
     @staticmethod
-    def is_allowed(url: str, robot_file_parser: RobotFileParser):
+    def is_allowed(url: str, robot_file_parser: RobotFileParser) -> bool:
         """
         Checks if URL is allowed in page's robots.txt
         """
@@ -205,9 +205,9 @@ class CrawlerHelper:
         if robot_file_parser is None or url is None:
             return True
         return robot_file_parser.can_fetch(USER_AGENT, url)
-    
+
     @staticmethod
-    def is_url(url):
+    def is_url(url) -> bool:
         """
         Checks if string is URL. It should return true for full URLs and also for partial (e.g. /about/me, #about, etc.)
         """
@@ -236,7 +236,7 @@ class CrawlerHelper:
             logging.info(f'Adding url {url} to frontier.')
 
     @staticmethod
-    def fill_url(url: str, current_url_parsed: ParseResult):
+    def fill_url(url: str, current_url_parsed: ParseResult) -> str:
         """
         Parameter url could be a full url or just a relative path (e.g. '/users/1', 'about.html', '/home')
         In such cases fill the rest of the URL and return
@@ -251,7 +251,7 @@ class CrawlerHelper:
         return filled_url
 
     @staticmethod
-    def get_real_url_from_shortlink(url: str):
+    def get_real_url_from_shortlink(url: str) -> str:
         """
         Gets the full URL that is return by server in case of shortened URLs with missing schema and host, etc.
         'gov.si' -> 'https://www.gov.si'
@@ -262,3 +262,10 @@ class CrawlerHelper:
         except:
             return url
         return resp.url
+
+    @staticmethod
+    def is_allowed_domain(url: ParseResult) -> bool:
+        """
+        Checks whether the domain is on the allowed list.
+        """
+        return govsi_regex.match(url.netloc)
