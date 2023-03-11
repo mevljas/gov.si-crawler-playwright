@@ -53,7 +53,7 @@ async def main():
     # Test with robots.txt and small sitemap. 
     # It takes 20 seconds to build the URL tree
     # !!! The sitemap has irregular sitemap URLs !!! 
-    await start_crawler(start_url='https://e-prostor.gov.si')
+    await start_crawler()
 
     # Clean database manager.
     await database_manager.cleanup()

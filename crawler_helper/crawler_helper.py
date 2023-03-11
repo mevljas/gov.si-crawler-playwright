@@ -1,20 +1,19 @@
 import logging
+import re
 from urllib.parse import ParseResult, urlparse
 from urllib.robotparser import RobotFileParser
 
+import requests
 from bs4 import BeautifulSoup
 from playwright.async_api import Page
 from url_normalize import url_normalize
 from w3lib.url import url_query_cleaner
-import requests
-import re
-import time
 
-from crawler_helper.constants import navigation_assign_regex, navigation_func_regex, USER_AGENT, govsi_regex
+from crawler_helper.constants import navigation_assign_regex, navigation_func_regex, USER_AGENT, govsi_regex, \
+    full_url_regex
 
 
 class CrawlerHelper:
-    domain_delay = 5  # seconds
 
     @staticmethod
     async def get_page(url: str, page: Page) -> (str, int):
@@ -53,7 +52,8 @@ class CrawlerHelper:
         return text
 
     @staticmethod
-    def find_links(beautiful_soup: BeautifulSoup, current_url: ParseResult, robot_file_parser: RobotFileParser) ->  set[str]:
+    def find_links(beautiful_soup: BeautifulSoup, current_url: ParseResult, robot_file_parser: RobotFileParser) -> set[
+        str]:
         """
         Get's verified HTML document and finds all valid new URL holder elements, parses those URLs and returns them.
         :param robot_file_parser: parser for robots.txt
@@ -99,7 +99,7 @@ class CrawlerHelper:
         return new_urls
 
     @staticmethod
-    def find_sitemap_links(current_url: ParseResult, robot_file_parser: RobotFileParser) ->  set[str]:
+    def find_sitemap_links(current_url: ParseResult, robot_file_parser: RobotFileParser) -> set[str]:
         """
         Checks for sitemap.xml file and recursively traverses the tree to find all URLs.
         :param robot_file_parser: parser for robots.txt
@@ -130,7 +130,6 @@ class CrawlerHelper:
         From given root sitemap url, visting all .xml child routes and return leaf nodes as a new set of URLs
         This is a recursive function.
         """
-        CrawlerHelper.delay()
         logging.debug(f'Looking at sitemap {sitemap_url} for new urls.')
         sitemap = requests.get(sitemap_url)
         if sitemap.status_code != 200:
@@ -153,15 +152,6 @@ class CrawlerHelper:
                 new_urls.add(url)
 
         return new_urls
-
-    @staticmethod
-    def delay() -> None:
-        """
-        Wait web crawler delay. Not to be used for playwright!
-        """
-        logging.debug(f'Delay for {CrawlerHelper.domain_delay} seconds')
-        time.sleep(CrawlerHelper.domain_delay)
-        return None
 
     @staticmethod
     def canonicalize(urls: set) -> set[str]:
@@ -201,10 +191,13 @@ class CrawlerHelper:
         """
         Checks if URL is allowed in page's robots.txt
         """
-        logging.debug(f'Checking whether url {url} is allowed.')
-        if robot_file_parser is None or url is None:
-            return True
-        return robot_file_parser.can_fetch(USER_AGENT, url)
+        logging.debug(f'Checking whether url {url} is allowed in robots.txt.')
+        if robot_file_parser is None:
+            allowed = True
+        else:
+            allowed = robot_file_parser.can_fetch(USER_AGENT, url)
+        logging.debug(f'Url {url} allowed in robots.txt: {allowed}.')
+        return allowed
 
     @staticmethod
     def is_url(url) -> bool:
@@ -223,17 +216,19 @@ class CrawlerHelper:
             return False
 
     @staticmethod
-    def save_urls(urls: set, frontier: list):
+    def save_urls(urls: set[str], frontier: set[str]):
         """
         Save new URLs to frontier
         """
         logging.debug('Saving urls.')
-        for url in urls:
+        url_list = list(urls)
+        for url in url_list:
             # TODO: check if gov.si domain
             # TODO: check if duplicate
             # TODO: add to frontier
-            frontier.append(url)
+            frontier.add(url)
             logging.info(f'Adding url {url} to frontier.')
+        logging.debug(f'Saved {len(url_list)} urls.')
 
     @staticmethod
     def fill_url(url: str, current_url_parsed: ParseResult) -> str:
@@ -264,8 +259,39 @@ class CrawlerHelper:
         return resp.url
 
     @staticmethod
-    def is_allowed_domain(url: ParseResult) -> bool:
+    def is_domain_allowed(url: str) -> bool:
         """
         Checks whether the domain is on the allowed list.
         """
-        return govsi_regex.match(url.netloc)
+        logging.debug(f'Checking wheter {url} is on the domain allowed list.')
+        url_parsed = urlparse(url)
+        allowed = govsi_regex.match(url_parsed.netloc)
+        logging.debug(f'Url {url} domain allowed: {allowed}.')
+        return allowed
+
+    @staticmethod
+    def fix_shortened_url(url: str) -> str:
+        """
+        Fix shortened url if necessary.
+        """
+        if not full_url_regex.match(url):
+            logging.debug('Url has to be cleaned.')
+            return CrawlerHelper.get_real_url_from_shortlink(url=url)
+        return url
+
+    @staticmethod
+    def load_robots_file(parsed_url: ParseResult, robot_file_parser: RobotFileParser) -> None:
+        """
+        Finds and parser site's robots.txt file.
+        """
+        robots_url = parsed_url.scheme + '://' + parsed_url.netloc + '/robots.txt'
+        logging.debug(f'Getting robots.txt with url {robots_url}.')
+        robot_file_parser.set_url(robots_url)
+        robot_file_parser.read()
+
+    @staticmethod
+    def filter_not_allowed_urls(urls: set[str], robot_file_parser: RobotFileParser):
+        logging.info(f'Filtering new urls according to the domain and robots.txt.')
+        return filter(lambda url:
+                      CrawlerHelper.is_domain_allowed(url=url)
+                      and CrawlerHelper.is_url_allowed(url=url, robot_file_parser=robot_file_parser), urls)
