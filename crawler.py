@@ -111,7 +111,7 @@ async def start_crawler():
     logger.info(f'Starting the crawler.')
     async with async_playwright() as playwright:
         chromium = playwright.chromium  # or "firefox" or "webkit".
-        browser = await chromium.launch(headless=False)
+        browser = await chromium.launch()
         page = await browser.new_page()
         # Prevent loading some resources for better performance.
         await page.route("**/*", CrawlerHelper.block_aggressively)
