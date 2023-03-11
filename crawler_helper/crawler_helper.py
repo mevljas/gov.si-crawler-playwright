@@ -1,4 +1,5 @@
 import re
+import socket
 from time import time
 from urllib.parse import ParseResult, urlparse
 from urllib.robotparser import RobotFileParser
@@ -306,23 +307,35 @@ class CrawlerHelper:
                            and CrawlerHelper.is_url_allowed(url=url, robot_file_parser=robot_file_parser), urls))
 
     @staticmethod
-    def save_domain_available_time(domain_available_times: dict, robot_delay: str, domain: str):
+    def save_site_available_time(
+            domain_available_times: dict,
+            ip_available_times: dict,
+            robot_delay: str,
+            domain: str,
+            ip: str):
         """
-        Save the time in seconds when the domain will be available for crawling again.
+        Save the time in seconds when the domain and ip will be available for crawling again.
         """
         delay = int(robot_delay) if robot_delay is not None else default_domain_delay
-        logger.debug(f'Saving delay {delay} seconds for the domain {domain}.')
+        logger.debug(f'Saving delay {delay} seconds for the domain {domain} and ip {ip}.')
         domain_available_times[domain] = time() + delay
+        if ip is not None:
+            ip_available_times[ip] = time() + delay
 
     @staticmethod
-    def get_domain_wait_time(domain_available_times: dict, domain: str):
+    def get_site_wait_time(domain_available_times: dict, ip_available_times: dict, domain: str, ip: str):
         """
-        Get the wait time in seconds for the domain to be available for crawling again.
+        Get the wait time in seconds for the domain an ip to be available for crawling again.
         """
         current_time = time()
-        delay = (domain_available_times.get(domain) or current_time) - current_time
-        logger.debug(f'Required delay for the domain {domain} is {delay} seconds.')
-        return delay
+        domain_delay = (domain_available_times.get(domain) or current_time) - current_time
+        if ip is not None:
+            ip_delay = (ip_available_times.get(ip) or current_time) - current_time
+        else:
+            ip_delay = -1
+        max_delay = max(domain_delay, ip_delay)
+        logger.debug(f'Required delay for the domain {domain} and ip {ip} is {max_delay} seconds.')
+        return max_delay
 
     @staticmethod
     async def block_aggressively(route):
@@ -333,3 +346,14 @@ class CrawlerHelper:
             await route.abort()
         else:
             await route.continue_()
+
+    @staticmethod
+    def get_site_ip(hostname: str):
+        """
+        Returns site's ip address.
+        """
+        try:
+            return socket.gethostbyname(hostname)
+        except:
+            logger.warning(f'Getting site ip address failed.')
+            return None

@@ -1,4 +1,5 @@
 import asyncio
+import socket
 import urllib.robotparser
 from urllib.parse import ParseResult
 from urllib.parse import urlparse
@@ -14,8 +15,8 @@ from logger.logger import logger
 already_visited_links = set()  # keep track of visited links to avoid crawling them again
 frontier = set()  # keep track of not visited links
 seed_urls = {'https://gov.si', 'https://evem.gov.si', 'https://e-uprava.gov.si', 'https://e-prostor.gov.si'}
-# seed_urls = {'https://e-prostor.gov.si'}
 domain_available_times = {}  # A set with domains next available times.
+ip_available_times = {}  # A set with ip next available times.
 
 
 async def crawl_url(current_url: str, page: Page, robot_file_parser: RobotFileParser):
@@ -37,8 +38,10 @@ async def crawl_url(current_url: str, page: Page, robot_file_parser: RobotFilePa
     # Get url domain
     domain = current_url_parsed.netloc
 
+    ip = CrawlerHelper.get_site_ip(hostname=domain)
+
     # Get wait time between calls to the same domain
-    wait_time = CrawlerHelper.get_domain_wait_time(domain_available_times=domain_available_times, domain=domain)
+    wait_time = CrawlerHelper.get_site_wait_time(domain_available_times=domain_available_times, domain=domain, ip_available_times=ip_available_times, ip=ip)
     if wait_time > 0:
         logger.debug(f'Required waiting time for the domain {domain} is {wait_time} seconds.')
         await asyncio.sleep(wait_time)
@@ -95,8 +98,8 @@ async def crawl_url(current_url: str, page: Page, robot_file_parser: RobotFilePa
     # TODO: save as column in site table?
     robot_delay = robot_file_parser.crawl_delay(USER_AGENT)
     # TODO: set delay in crawler instance?
-    CrawlerHelper.save_domain_available_time(domain_available_times=domain_available_times, domain=domain,
-                                             robot_delay=robot_delay)
+    CrawlerHelper.save_site_available_time(domain_available_times=domain_available_times, domain=domain,
+                                           robot_delay=robot_delay, ip_available_times=ip_available_times, ip=ip)
 
     logger.info(f'Crawling url {current_url} finished.')
 
