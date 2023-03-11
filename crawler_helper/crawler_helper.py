@@ -226,7 +226,6 @@ class CrawlerHelper:
         logger.debug('Saving urls.')
         url_list = list(urls)
         for url in url_list:
-            # TODO: check if gov.si domain
             # TODO: check if duplicate
             # TODO: add to frontier
             frontier.add(url)

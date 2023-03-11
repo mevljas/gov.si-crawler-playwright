@@ -96,10 +96,7 @@ async def crawl_url(current_url: str, page: Page, robot_file_parser: RobotFilePa
     # CrawlerHelper.save_urls(urls=new_links, frontier=frontier)
     seed_urls.update(new_links)
 
-    # TODO: incorporate delay for fetching pages in domain
-    # TODO: save as column in site table?
     robot_delay = robot_file_parser.crawl_delay(USER_AGENT)
-    # TODO: set delay in crawler instance?
     CrawlerHelper.save_site_available_time(domain_available_times=domain_available_times, domain=domain,
                                            robot_delay=robot_delay, ip_available_times=ip_available_times, ip=ip)
 
