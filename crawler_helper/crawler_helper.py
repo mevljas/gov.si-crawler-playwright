@@ -91,8 +91,9 @@ class CrawlerHelper:
             # handle relative path URLs and fix them
             url = CrawlerHelper.fill_url(url, current_url)
 
-            # check if allowed to visit
-            if CrawlerHelper.is_url_allowed(url, robot_file_parser=robot_file_parser):
+            # check if the url is allowed to visit
+            if CrawlerHelper.is_url_allowed(url, robot_file_parser=robot_file_parser) \
+                    and CrawlerHelper.is_domain_allowed(url=url):
                 new_urls.add(url)
 
         # translate URLs to canonical form
@@ -295,16 +296,6 @@ class CrawlerHelper:
         except:
             logger.debug(f'Getting robots.txt with url {robots_url} failed.')
             return None
-
-    @staticmethod
-    def filter_not_allowed_urls(urls: set[str], robot_file_parser: RobotFileParser) -> list[str]:
-        """
-        Remove urls that should be ignored.
-        """
-        logger.info(f'Filtering new urls according to the domain and robots.txt.')
-        return list(filter(lambda url:
-                           CrawlerHelper.is_domain_allowed(url=url)
-                           and CrawlerHelper.is_url_allowed(url=url, robot_file_parser=robot_file_parser), urls))
 
     @staticmethod
     def save_site_available_time(

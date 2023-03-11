@@ -88,9 +88,6 @@ async def crawl_url(current_url: str, page: Page, robot_file_parser: RobotFilePa
     # skip crawling already visited links
     new_links = new_links - already_visited_links
 
-    # Filter urls
-    new_links = CrawlerHelper.filter_not_allowed_urls(urls=new_links, robot_file_parser=robot_file_parser)
-
     # TODO: check for duplicate page in Frontier
 
     # TODO: save page content
