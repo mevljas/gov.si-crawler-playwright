@@ -24,9 +24,6 @@ def load_env() -> (str, str, str):
     return postgres_user, postgres_password, postgres_db
 
 
-
-
-
 async def main():
     logger.info('Application started.')
 

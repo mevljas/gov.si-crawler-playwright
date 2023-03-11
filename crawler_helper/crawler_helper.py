@@ -24,11 +24,11 @@ class CrawlerHelper:
         :param page: Browser page.
         :return: html, status
         """
-        response = await page.goto(url)
-        await page.wait_for_timeout(2000)
+        logger.debug(f'Opening page {url}.')
+        response = await page.goto(url, timeout=10000)
         html = await page.content()
         status = response.status
-
+        logger.debug(f'Response status is {status}.')
         return html, status
 
     @staticmethod
@@ -278,6 +278,7 @@ class CrawlerHelper:
         if not full_url_regex.match(url):
             logger.debug('Url has to be cleaned.')
             return CrawlerHelper.get_real_url_from_shortlink(url=url)
+        logger.debug('Url doesnt have to be cleaned.')
         return url
 
     @staticmethod
@@ -287,37 +288,38 @@ class CrawlerHelper:
         """
         robots_url = parsed_url.scheme + '://' + parsed_url.netloc + '/robots.txt'
         logger.debug(f'Getting robots.txt with url {robots_url}.')
-        robot_file_parser.set_url(robots_url)
-        robot_file_parser.read()
+        try:
+            robot_file_parser.set_url(robots_url)
+            robot_file_parser.read()
+        except:
+            logger.debug(f'Getting robots.txt with url {robots_url} failed.')
+            return None
 
     @staticmethod
-    def filter_not_allowed_urls(urls: set[str], robot_file_parser: RobotFileParser):
+    def filter_not_allowed_urls(urls: set[str], robot_file_parser: RobotFileParser) -> list[str]:
         """
         Remove urls that should be ignored.
         """
         logger.info(f'Filtering new urls according to the domain and robots.txt.')
-        return filter(lambda url:
-                      CrawlerHelper.is_domain_allowed(url=url)
-                      and CrawlerHelper.is_url_allowed(url=url, robot_file_parser=robot_file_parser), urls)
+        return list(filter(lambda url:
+                           CrawlerHelper.is_domain_allowed(url=url)
+                           and CrawlerHelper.is_url_allowed(url=url, robot_file_parser=robot_file_parser), urls))
 
     @staticmethod
-    def extract_domain_from_url(url: ParseResult) -> str:
-        """Extract and return domain name from an url."""
-        long_domain = url.netloc
-        return ''.join(long_domain.split('.')[-2:])
-
-    @staticmethod
-    def save_domain_available_time(domain_accesses: dict, robot_delay: str, domain: str):
+    def save_domain_available_time(domain_available_times: dict, robot_delay: str, domain: str):
         """
         Save the time in seconds when the domain will be available for crawling again.
         """
         delay = int(robot_delay) if robot_delay is not None else default_domain_delay
-        domain_accesses[domain] = time() + delay
+        logger.debug(f'Saving delay {delay} seconds for the domain {domain}.')
+        domain_available_times[domain] = time() + delay
 
     @staticmethod
-    def get_domain_wait_time(domain_accesses: dict, domain: str):
+    def get_domain_wait_time(domain_available_times: dict, domain: str):
         """
         Get the wait time in seconds for the domain to be available for crawling again.
         """
         current_time = time()
-        return current_time - (domain_accesses.get(domain) or current_time)
+        delay = (domain_available_times.get(domain) or current_time) - current_time
+        logger.debug(f'Required delay for the domain {domain} is {delay} seconds.')
+        return delay

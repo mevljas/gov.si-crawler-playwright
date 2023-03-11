@@ -13,9 +13,9 @@ from logger.logger import logger
 
 already_visited_links = set()  # keep track of visited links to avoid crawling them again
 frontier = set()  # keep track of not visited links
-# seed_urls = {'https://gov.si', 'https://evem.gov.si', 'https://e-uprava.gov.si', 'https://e-prostor.gov.si'}
-seed_urls = {'https://e-prostor.gov.si'}
-domain_accesses = {}  # A set with domains next available times.
+seed_urls = {'https://gov.si', 'https://evem.gov.si', 'https://e-uprava.gov.si', 'https://e-prostor.gov.si'}
+# seed_urls = {'https://e-prostor.gov.si'}
+domain_available_times = {}  # A set with domains next available times.
 
 
 async def crawl_url(current_url: str, page: Page, robot_file_parser: RobotFileParser):
@@ -35,24 +35,28 @@ async def crawl_url(current_url: str, page: Page, robot_file_parser: RobotFilePa
     current_url_parsed: ParseResult = urlparse(current_url)
 
     # Get url domain
-    domain = CrawlerHelper.extract_domain_from_url(url=current_url_parsed)
+    domain = current_url_parsed.netloc
 
-    wait_time = CrawlerHelper.get_domain_wait_time(domain_accesses=domain_accesses, domain=domain)
-
+    # Get wait time between calls to the same domain
+    wait_time = CrawlerHelper.get_domain_wait_time(domain_available_times=domain_available_times, domain=domain)
     if wait_time > 0:
-        logger.debug(f'Required domain waiting time {wait_time} seconds.')
+        logger.debug(f'Required waiting time for the domain {domain} is {wait_time} seconds.')
         await asyncio.sleep(wait_time)
+    else:
+        logger.debug(f'Waiting for accessing the domain {domain} is not required.')
 
     # TODO: mark as visited in Frontier
-    already_visited_links.add(current_url)
 
     # get robots.txt
     CrawlerHelper.load_robots_file(parsed_url=current_url_parsed, robot_file_parser=robot_file_parser)
 
     # fetch page
     # TODO: incorporate check for different file types other than HTML (.pdf, .doc, .docx, .ppt, .pptx)
-    # TODO: check and save http status
-    (html, status) = await CrawlerHelper.get_page(url=current_url, page=page)
+    try:
+        (html, status) = await CrawlerHelper.get_page(url=current_url, page=page)
+    except Exception as e:
+        logger.warning(f'Opening page {current_url} failed with an error {e}.')
+        return
 
     # extract any relevant data from the page here, using BeautifulSoup
     beautiful_soup = BeautifulSoup(html, "html.parser")
@@ -62,7 +66,13 @@ async def crawl_url(current_url: str, page: Page, robot_file_parser: RobotFilePa
 
     # get URLs
     page_urls = CrawlerHelper.find_links(beautiful_soup, current_url_parsed, robot_file_parser=robot_file_parser)
-    sitemap_urls = CrawlerHelper.find_sitemap_links(current_url_parsed, robot_file_parser=robot_file_parser)
+
+    # Don't request sitemaps if the domain was already visited
+    if domain not in domain_available_times.keys():
+        sitemap_urls = CrawlerHelper.find_sitemap_links(current_url_parsed, robot_file_parser=robot_file_parser)
+    else:
+        sitemap_urls = set()
+        logger.debug(f'Domain {domain} was already visited so sitemaps will be ignored.')
 
     # combine DOM and sitemap URLs
     new_links = page_urls.union(sitemap_urls)
@@ -78,13 +88,15 @@ async def crawl_url(current_url: str, page: Page, robot_file_parser: RobotFilePa
     # TODO: save page content
     # print(content)
     # TODO: save new URLs
-    CrawlerHelper.save_urls(urls=new_links, frontier=frontier)
+    # CrawlerHelper.save_urls(urls=new_links, frontier=frontier)
+    seed_urls.update(new_links)
 
     # TODO: incorporate delay for fetching pages in domain
     # TODO: save as column in site table?
     robot_delay = robot_file_parser.crawl_delay(USER_AGENT)
     # TODO: set delay in crawler instance?
-    CrawlerHelper.save_domain_available_time(domain_accesses=domain_accesses, domain=domain, robot_delay=robot_delay)
+    CrawlerHelper.save_domain_available_time(domain_available_times=domain_available_times, domain=domain,
+                                             robot_delay=robot_delay)
 
     logger.info(f'Crawling url {current_url} finished.')
 
@@ -101,9 +113,12 @@ async def start_crawler():
         robot_file_parser = urllib.robotparser.RobotFileParser()
         while seed_urls:  # While seed list is not empty
             for url in list(seed_urls):
-                await crawl_url(current_url=url, page=page, robot_file_parser=robot_file_parser)
+                try:
+                    await crawl_url(current_url=url, page=page, robot_file_parser=robot_file_parser)
+                except Exception as e:
+                    logger.critical(f'Crawling url {url} failed with an error {e}.')
+                already_visited_links.add(url)
                 seed_urls.remove(url)
-                break
 
         await browser.close()
     logger.info(f'Crawler finished.')
