@@ -44,7 +44,7 @@ async def crawl_url(current_url: str, page: Page, robot_file_parser: RobotFilePa
     robot_file_parser.read()
 
     # check if URL is allowed by robots.txt rules
-    if not CrawlerHelper.is_allowed(current_url, robot_file_parser=robot_file_parser):
+    if not CrawlerHelper.is_url_allowed(current_url, robot_file_parser=robot_file_parser):
         logging.info('Url is not allowed in robots')
         return
 

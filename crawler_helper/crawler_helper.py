@@ -90,7 +90,7 @@ class CrawlerHelper:
             url = CrawlerHelper.fill_url(url, current_url)
 
             # check if allowed to visit
-            if CrawlerHelper.is_allowed(url, robot_file_parser=robot_file_parser):
+            if CrawlerHelper.is_url_allowed(url, robot_file_parser=robot_file_parser):
                 new_urls.add(url)
 
         # translate URLs to canonical form
@@ -197,7 +197,7 @@ class CrawlerHelper:
         return bool(re.match(pattern, url))
 
     @staticmethod
-    def is_allowed(url: str, robot_file_parser: RobotFileParser) -> bool:
+    def is_url_allowed(url: str, robot_file_parser: RobotFileParser) -> bool:
         """
         Checks if URL is allowed in page's robots.txt
         """
