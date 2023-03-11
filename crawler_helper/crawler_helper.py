@@ -10,7 +10,7 @@ from url_normalize import url_normalize
 from w3lib.url import url_query_cleaner
 
 from crawler_helper.constants import navigation_assign_regex, navigation_func_regex, USER_AGENT, govsi_regex, \
-    full_url_regex, default_domain_delay
+    full_url_regex, default_domain_delay, excluded_resource_types
 from logger.logger import logger
 
 
@@ -323,3 +323,13 @@ class CrawlerHelper:
         delay = (domain_available_times.get(domain) or current_time) - current_time
         logger.debug(f'Required delay for the domain {domain} is {delay} seconds.')
         return delay
+
+    @staticmethod
+    async def block_aggressively(route):
+        """
+        Prevent loading some resources for better performance.
+        """
+        if route.request.resource_type in excluded_resource_types:
+            await route.abort()
+        else:
+            await route.continue_()

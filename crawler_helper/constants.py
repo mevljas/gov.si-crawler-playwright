@@ -15,3 +15,5 @@ The URL is stored in group 4
 navigation_func_regex = re.compile(".*(.)?location(.href)?.(.*)\([\"\'](.*)[\"\']\)")
 USER_AGENT = "fri-wier-besela"
 default_domain_delay = 5  # seconds
+# Resource types that will be blocked.
+excluded_resource_types = ["image", "font", "media"]

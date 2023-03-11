@@ -108,8 +108,10 @@ async def start_crawler():
     logger.info(f'Starting the crawler.')
     async with async_playwright() as playwright:
         chromium = playwright.chromium  # or "firefox" or "webkit".
-        browser = await chromium.launch()
+        browser = await chromium.launch(headless=False)
         page = await browser.new_page()
+        # Prevent loading some resources for better performance.
+        await page.route("**/*", CrawlerHelper.block_aggressively)
         robot_file_parser = urllib.robotparser.RobotFileParser()
         while seed_urls:  # While seed list is not empty
             for url in list(seed_urls):
