@@ -1,5 +1,6 @@
 import asyncio
 import os
+import sys
 
 from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
@@ -7,6 +8,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 from database.database_manager import DatabaseManager
 from database.models import meta, DataType, PageType
 import logging
+
+from logger.logger import ColorizedArgsFormatter, BraceFormatStyleFormatter, logger
 
 
 def load_env() -> (str, str, str):
@@ -45,8 +48,7 @@ async def seed_default(async_session_maker: async_sessionmaker[AsyncSession]):
 
 
 async def main():
-    logging.basicConfig(level=logging.DEBUG)
-    logging.info('Migration started.')
+    logger.info('Migration started.')
 
     # Load env variables.
     postgres_user, postgres_password, postgres_db = load_env()
@@ -65,7 +67,7 @@ async def main():
 
     # Clean database manager.
     await database_manager.cleanup()
-    logging.info('Migration finished.')
+    logger.info('Migration finished.')
 
 
 if __name__ == '__main__':

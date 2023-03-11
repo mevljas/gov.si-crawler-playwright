@@ -1,11 +1,15 @@
 import asyncio
-import logging
 import os
+import sys
 
 from dotenv import load_dotenv
 
 from crawler import start_crawler
 from database.database_manager import DatabaseManager
+import logging
+import sys
+
+from logger.logger import ColorizedArgsFormatter, BraceFormatStyleFormatter, logger
 
 
 def load_env() -> (str, str, str):
@@ -20,9 +24,11 @@ def load_env() -> (str, str, str):
     return postgres_user, postgres_password, postgres_db
 
 
+
+
+
 async def main():
-    logging.basicConfig(level=logging.DEBUG)
-    logging.info('Application started.')
+    logger.info('Application started.')
 
     # Load env variables.
     postgres_user, postgres_password, postgres_db = load_env()
@@ -58,7 +64,7 @@ async def main():
     # Clean database manager.
     await database_manager.cleanup()
 
-    logging.info('Application finished.')
+    logger.info('Application finished.')
 
 
 if __name__ == '__main__':

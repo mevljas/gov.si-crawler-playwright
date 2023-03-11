@@ -1,5 +1,5 @@
-import logging
 import re
+from time import time
 from urllib.parse import ParseResult, urlparse
 from urllib.robotparser import RobotFileParser
 
@@ -10,7 +10,8 @@ from url_normalize import url_normalize
 from w3lib.url import url_query_cleaner
 
 from crawler_helper.constants import navigation_assign_regex, navigation_func_regex, USER_AGENT, govsi_regex, \
-    full_url_regex
+    full_url_regex, default_domain_delay
+from logger.logger import logger
 
 
 class CrawlerHelper:
@@ -36,7 +37,7 @@ class CrawlerHelper:
         Get's verified HTML document and parses out only relevant text, which is then returned
         :param beautiful_soup: output of BeautifulSoup4 (i.e. validated and parsed HTML)
         """
-        logging.debug(f'Extracting text from the page.')
+        logger.debug(f'Extracting text from the page.')
 
         # kill all script and style elements
         for script in beautiful_soup(["script", "style"]):
@@ -60,7 +61,7 @@ class CrawlerHelper:
         :param current_url: website url to extract links from
         :param beautiful_soup:  output of BeautifulSoup4 (i.e. validated and parsed HTML)
         """
-        logging.debug(f'Finding links on the page.')
+        logger.debug(f'Finding links on the page.')
 
         # find new URLs in DOM
         # select all valid navigatable elements
@@ -105,7 +106,7 @@ class CrawlerHelper:
         :param robot_file_parser: parser for robots.txt
         :param current_url: website url to extract links from
         """
-        logging.debug(f'Finding urls from sitemaps.')
+        logger.debug(f'Finding urls from sitemaps.')
         # find URLs from all sitemaps
         # check for sitemap.xml file and return the content as list(), otherwise None
         sitemaps = robot_file_parser.site_maps()
@@ -130,7 +131,7 @@ class CrawlerHelper:
         From given root sitemap url, visting all .xml child routes and return leaf nodes as a new set of URLs
         This is a recursive function.
         """
-        logging.debug(f'Looking at sitemap {sitemap_url} for new urls.')
+        logger.debug(f'Looking at sitemap {sitemap_url} for new urls.')
         sitemap = requests.get(sitemap_url)
         if sitemap.status_code != 200:
             return new_urls if new_urls != None else set()
@@ -161,7 +162,7 @@ class CrawlerHelper:
         - remove query parameters
         - remove element id selector from end of URL
         """
-        logging.debug(f'Translating urls into a canonical form.')
+        logger.debug(f'Translating urls into a canonical form.')
         new_urls = set()
         for url in urls:
             u = url_normalize(url)  # general form fixes
@@ -182,7 +183,7 @@ class CrawlerHelper:
         """
         Checks if URL end with a file extenstion like: .html, .pdf, .txt, etc.
         """
-        logging.debug(f'Checking whether url {url} points to file.')
+        logger.debug(f'Checking whether url {url} points to file.')
         pattern = r'^.*\/[^\/]+\.[^\/]+$'
         return bool(re.match(pattern, url))
 
@@ -191,12 +192,12 @@ class CrawlerHelper:
         """
         Checks if URL is allowed in page's robots.txt
         """
-        logging.debug(f'Checking whether url {url} is allowed in robots.txt.')
+        logger.debug(f'Checking whether url {url} is allowed in robots.txt.')
         if robot_file_parser is None:
             allowed = True
         else:
             allowed = robot_file_parser.can_fetch(USER_AGENT, url)
-        logging.debug(f'Url {url} allowed in robots.txt: {allowed}.')
+        logger.debug(f'Url {url} allowed in robots.txt: {allowed}.')
         return allowed
 
     @staticmethod
@@ -204,7 +205,7 @@ class CrawlerHelper:
         """
         Checks if string is URL. It should return true for full URLs and also for partial (e.g. /about/me, #about, etc.)
         """
-        logging.debug(f'Checking whether potential url {url} is of valid format.')
+        logger.debug(f'Checking whether potential url {url} is of valid format.')
         if url is None:
             return False
         try:
@@ -220,15 +221,15 @@ class CrawlerHelper:
         """
         Save new URLs to frontier
         """
-        logging.debug('Saving urls.')
+        logger.debug('Saving urls.')
         url_list = list(urls)
         for url in url_list:
             # TODO: check if gov.si domain
             # TODO: check if duplicate
             # TODO: add to frontier
             frontier.add(url)
-            logging.info(f'Adding url {url} to frontier.')
-        logging.debug(f'Saved {len(url_list)} urls.')
+            logger.debug(f'Adding url {url} to frontier.')
+        logger.info(f'Saved {len(url_list)} urls.')
 
     @staticmethod
     def fill_url(url: str, current_url_parsed: ParseResult) -> str:
@@ -236,7 +237,7 @@ class CrawlerHelper:
         Parameter url could be a full url or just a relative path (e.g. '/users/1', 'about.html', '/home')
         In such cases fill the rest of the URL and return
         """
-        logging.debug(f'Filling url {url}.')
+        logger.debug(f'Filling url {url}.')
         url_parsed = urlparse(url)
         filled_url = url
         # check if full url
@@ -251,7 +252,7 @@ class CrawlerHelper:
         Gets the full URL that is return by server in case of shortened URLs with missing schema and host, etc.
         'gov.si' -> 'https://www.gov.si'
         """
-        logging.debug(f'Getting real url from the short url {url}.')
+        logger.debug(f'Getting real url from the short url {url}.')
         try:
             resp = requests.get(url)
         except:
@@ -263,10 +264,10 @@ class CrawlerHelper:
         """
         Checks whether the domain is on the allowed list.
         """
-        logging.debug(f'Checking wheter {url} is on the domain allowed list.')
+        logger.debug(f'Checking wheter {url} is on the domain allowed list.')
         url_parsed = urlparse(url)
         allowed = govsi_regex.match(url_parsed.netloc)
-        logging.debug(f'Url {url} domain allowed: {allowed}.')
+        logger.debug(f'Url {url} domain allowed: {allowed}.')
         return allowed
 
     @staticmethod
@@ -275,7 +276,7 @@ class CrawlerHelper:
         Fix shortened url if necessary.
         """
         if not full_url_regex.match(url):
-            logging.debug('Url has to be cleaned.')
+            logger.debug('Url has to be cleaned.')
             return CrawlerHelper.get_real_url_from_shortlink(url=url)
         return url
 
@@ -285,13 +286,38 @@ class CrawlerHelper:
         Finds and parser site's robots.txt file.
         """
         robots_url = parsed_url.scheme + '://' + parsed_url.netloc + '/robots.txt'
-        logging.debug(f'Getting robots.txt with url {robots_url}.')
+        logger.debug(f'Getting robots.txt with url {robots_url}.')
         robot_file_parser.set_url(robots_url)
         robot_file_parser.read()
 
     @staticmethod
     def filter_not_allowed_urls(urls: set[str], robot_file_parser: RobotFileParser):
-        logging.info(f'Filtering new urls according to the domain and robots.txt.')
+        """
+        Remove urls that should be ignored.
+        """
+        logger.info(f'Filtering new urls according to the domain and robots.txt.')
         return filter(lambda url:
                       CrawlerHelper.is_domain_allowed(url=url)
                       and CrawlerHelper.is_url_allowed(url=url, robot_file_parser=robot_file_parser), urls)
+
+    @staticmethod
+    def extract_domain_from_url(url: ParseResult) -> str:
+        """Extract and return domain name from an url."""
+        long_domain = url.netloc
+        return ''.join(long_domain.split('.')[-2:])
+
+    @staticmethod
+    def save_domain_available_time(domain_accesses: dict, robot_delay: str, domain: str):
+        """
+        Save the time in seconds when the domain will be available for crawling again.
+        """
+        delay = int(robot_delay) if robot_delay is not None else default_domain_delay
+        domain_accesses[domain] = time() + delay
+
+    @staticmethod
+    def get_domain_wait_time(domain_accesses: dict, domain: str):
+        """
+        Get the wait time in seconds for the domain to be available for crawling again.
+        """
+        current_time = time()
+        return current_time - (domain_accesses.get(domain) or current_time)

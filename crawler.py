@@ -1,5 +1,4 @@
 import asyncio
-import logging
 import urllib.robotparser
 from urllib.parse import ParseResult
 from urllib.parse import urlparse
@@ -8,13 +7,15 @@ from urllib.robotparser import RobotFileParser
 from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright, Page
 
-from crawler_helper.constants import USER_AGENT, default_domain_delay
+from crawler_helper.constants import USER_AGENT
 from crawler_helper.crawler_helper import CrawlerHelper
+from logger.logger import logger
 
-already_visited_links = set() # keep track of visited links to avoid crawling them again
+already_visited_links = set()  # keep track of visited links to avoid crawling them again
 frontier = set()  # keep track of not visited links
 # seed_urls = {'https://gov.si', 'https://evem.gov.si', 'https://e-uprava.gov.si', 'https://e-prostor.gov.si'}
 seed_urls = {'https://e-prostor.gov.si'}
+domain_accesses = {}  # A set with domains next available times.
 
 
 async def crawl_url(current_url: str, page: Page, robot_file_parser: RobotFileParser):
@@ -25,16 +26,25 @@ async def crawl_url(current_url: str, page: Page, robot_file_parser: RobotFilePa
     :param robot_file_parser: parser for robots.txt
     :return:
     """
-    logging.info(f'Crawling url {current_url} started.')
-
-    # TODO: mark as visited in Frontier
-    already_visited_links.add(current_url)
+    logger.info(f'Crawling url {current_url} started.')
 
     # Fix shortened URLs (if necessary).
     current_url = CrawlerHelper.fix_shortened_url(url=current_url)
 
     # Parse url into a ParseResult object.
     current_url_parsed: ParseResult = urlparse(current_url)
+
+    # Get url domain
+    domain = CrawlerHelper.extract_domain_from_url(url=current_url_parsed)
+
+    wait_time = CrawlerHelper.get_domain_wait_time(domain_accesses=domain_accesses, domain=domain)
+
+    if wait_time > 0:
+        logger.debug(f'Required domain waiting time {wait_time} seconds.')
+        await asyncio.sleep(wait_time)
+
+    # TODO: mark as visited in Frontier
+    already_visited_links.add(current_url)
 
     # get robots.txt
     CrawlerHelper.load_robots_file(parsed_url=current_url_parsed, robot_file_parser=robot_file_parser)
@@ -48,7 +58,7 @@ async def crawl_url(current_url: str, page: Page, robot_file_parser: RobotFilePa
     beautiful_soup = BeautifulSoup(html, "html.parser")
 
     # get content
-    content = CrawlerHelper.extract_text(beautiful_soup)
+    # content = CrawlerHelper.extract_text(beautiful_soup)
 
     # get URLs
     page_urls = CrawlerHelper.find_links(beautiful_soup, current_url_parsed, robot_file_parser=robot_file_parser)
@@ -63,31 +73,27 @@ async def crawl_url(current_url: str, page: Page, robot_file_parser: RobotFilePa
     # Filter urls
     new_links = CrawlerHelper.filter_not_allowed_urls(urls=new_links, robot_file_parser=robot_file_parser)
 
-
-
     # TODO: check for duplicate page in Frontier
 
     # TODO: save page content
     # print(content)
     # TODO: save new URLs
     CrawlerHelper.save_urls(urls=new_links, frontier=frontier)
-    logging.info(f'Crawling url {current_url} finished.')
 
     # TODO: incorporate delay for fetching pages in domain
     # TODO: save as column in site table?
     robot_delay = robot_file_parser.crawl_delay(USER_AGENT)
     # TODO: set delay in crawler instance?
-    if robot_delay:
-        await asyncio.sleep(int(robot_delay))
-    else:
-        await asyncio.sleep(default_domain_delay)
+    CrawlerHelper.save_domain_available_time(domain_accesses=domain_accesses, domain=domain, robot_delay=robot_delay)
+
+    logger.info(f'Crawling url {current_url} finished.')
 
 
 async def start_crawler():
     """
     Setups the playwright library and starts the crawler.
     """
-    logging.info(f'Starting the crawler.')
+    logger.info(f'Starting the crawler.')
     async with async_playwright() as playwright:
         chromium = playwright.chromium  # or "firefox" or "webkit".
         browser = await chromium.launch()
@@ -100,4 +106,4 @@ async def start_crawler():
                 break
 
         await browser.close()
-    logging.info(f'Crawler finished.')
+    logger.info(f'Crawler finished.')
