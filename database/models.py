@@ -8,12 +8,18 @@ Base = declarative_base(metadata=meta)
 
 
 class DataType(Base):
+    """
+    Available values: PDF, DOC, DOCX, PPT, PPTX
+    """
     __tablename__ = 'data_type'
 
     code = Column(String(20), primary_key=True, autoincrement=False)
 
 
 class PageType(Base):
+    """
+    Available values: HTML, BINARY, DUPLICATE, FRONTIER
+    """
     __tablename__ = 'page_type'
 
     code = Column(String(20), primary_key=True, autoincrement=False)

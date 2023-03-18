@@ -1,4 +1,6 @@
 import re
+import asyncio
+import os
 import socket
 from time import time
 from urllib.parse import ParseResult, urlparse
@@ -11,14 +13,14 @@ from url_normalize import url_normalize
 from w3lib.url import url_query_cleaner
 
 from crawler_helper.constants import navigation_assign_regex, navigation_func_regex, USER_AGENT, govsi_regex, \
-    full_url_regex, default_domain_delay, excluded_resource_types
+    full_url_regex, default_domain_delay, excluded_resource_types, relative_url_regex, image_extensions
 from logger.logger import logger
 
 
 class CrawlerHelper:
 
     @staticmethod
-    async def get_page(url: str, page: Page) -> (str, int):
+    async def get_page(url: str, page: Page) -> (str, str, int):
         """
         Requests and downloads a specific webpage.
         :param url: Webpage url to be crawled.
@@ -30,28 +32,7 @@ class CrawlerHelper:
         html = await page.content()
         status = response.status
         logger.debug(f'Response status is {status}.')
-        return html, status
-
-    @staticmethod
-    def extract_text(beautiful_soup: BeautifulSoup) -> str:
-        """
-        Get's verified HTML document and parses out only relevant text, which is then returned
-        :param beautiful_soup: output of BeautifulSoup4 (i.e. validated and parsed HTML)
-        """
-        logger.debug(f'Extracting text from the page.')
-
-        # kill all script and style elements
-        for script in beautiful_soup(["script", "style"]):
-            script.extract()
-        # get text
-        text = beautiful_soup.get_text()
-        # break into lines and remove leading and trailing space on each
-        lines = (line.strip() for line in text.splitlines())
-        # break multi-headlines into a line each
-        chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-        # drop blank lines
-        text = '\n'.join(chunk for chunk in chunks if chunk)
-        return text
+        return page.url, html, status
 
     @staticmethod
     def find_links(beautiful_soup: BeautifulSoup, current_url: ParseResult, robot_file_parser: RobotFileParser) -> set[
@@ -102,7 +83,49 @@ class CrawlerHelper:
         return new_urls
 
     @staticmethod
-    def find_sitemap_links(current_url: ParseResult, robot_file_parser: RobotFileParser) -> set[str]:
+    def find_images(beautiful_soup: BeautifulSoup, current_url: ParseResult) -> set[(str, str)]:
+        """
+        Get's verified HTML document and finds all images and returns them.
+        :param current_url: website url to extract links from
+        :param beautiful_soup:  output of BeautifulSoup4 (i.e. validated and parsed HTML)
+        """
+        logger.debug(f'Finding images on the page.')
+
+        # find img tags in DOM
+        imgs = beautiful_soup.select('img')
+        images = set()
+        for img in imgs:
+            src = img.attrs.get('src')
+
+            # Extract the path component of the URL
+            path = urlparse(src).path
+            # Split the path into filename and extension
+            name, ext = os.path.splitext(os.path.basename(path))
+
+            # Check if the URL is a data URI
+            # Example: src='data:image/png;base64,iVBORw0[...]uQmCC'
+            if src.startswith('data:image'):
+                filename = None
+                extension = src.split(';')[0].split('/')[-1]
+            # Parse the URL and check if it has a valid file extension
+            elif ext.lower() in image_extensions:
+                filename = name
+                extension = ext[1:]  # remove the dot from the extension
+            else:
+                continue         
+            
+            # TODO: Theoretically we do not need to get the actual image? Just filename and extension
+            # # Check if src is relative path
+            # if relative_url_regex.match(src):
+            #     full_path = current_url.scheme + '://' + current_url.netloc + src
+            # # Check if full url
+            # elif full_url_regex.match(src):
+            #     full_path = src
+            images.add((filename, extension))
+        return images
+
+    @staticmethod
+    def find_sitemap_links(current_url: ParseResult, robot_file_parser: RobotFileParser, wait_time: int) -> set[str]:
         """
         Checks for sitemap.xml file and recursively traverses the tree to find all URLs.
         :param robot_file_parser: parser for robots.txt
@@ -128,11 +151,12 @@ class CrawlerHelper:
         return new_urls_sitemap
 
     @staticmethod
-    def get_sitemap_urls(self, sitemap_url, new_urls=None) -> set[str]:
+    def get_sitemap_urls(self, sitemap_url, new_urls=None, wait_time: int=default_domain_delay) -> set[str]:
         """
         From given root sitemap url, visting all .xml child routes and return leaf nodes as a new set of URLs
         This is a recursive function.
         """
+        CrawlerHelper.delay(wait_time)
         logger.debug(f'Looking at sitemap {sitemap_url} for new urls.')
         sitemap = requests.get(sitemap_url)
         if sitemap.status_code != 200:
@@ -157,6 +181,15 @@ class CrawlerHelper:
         return new_urls
 
     @staticmethod
+    def delay() -> None:
+        """
+        Wait web crawler delay. Not to be used for playwright!
+        """
+        logger.debug(f'Delay for {CrawlerHelper.domain_delay} seconds')
+        time.sleep(CrawlerHelper.domain_delay)
+        return None
+
+    @staticmethod
     def canonicalize(urls: set) -> set[str]:
         """
         Translates URLs into canonical form
@@ -170,10 +203,6 @@ class CrawlerHelper:
             u = url_normalize(url)  # general form fixes
             u = url_query_cleaner(u)  # remove query params
             u = re.sub(r'#.*$', '', u)  # remove fragment
-            # add 'www' subdomain
-            if 'www' not in u and '://' in u:
-                protocol_end = u.index('://') + 3
-                u = u[:protocol_end] + 'www.' + url[protocol_end:]
             # end with / if not a filetype
             if not (CrawlerHelper.has_file_extension(u) or u.endswith('/')):
                 u += '/'
@@ -274,13 +303,23 @@ class CrawlerHelper:
     @staticmethod
     def fix_shortened_url(url: str) -> str:
         """
-        Fix shortened url if necessary.
+        Fix shortened url if necessary. 
+        Also transform into canonical form to then compare to actual url in browser.
         """
         if not full_url_regex.match(url):
             logger.debug('Url has to be cleaned.')
             return CrawlerHelper.get_real_url_from_shortlink(url=url)
         logger.debug('Url doesnt have to be cleaned.')
         return url
+
+    @staticmethod
+    def get_base_url(url: str) -> str:
+        """
+        Get base url. 
+        """
+        logger.debug(f'Converting {url} to base url.')
+        parsed_url: ParseResult = urlparse(url)
+        return parsed_url.scheme + '://' + parsed_url.netloc + '/'
 
     @staticmethod
     def load_robots_file(parsed_url: ParseResult, robot_file_parser: RobotFileParser) -> None:

@@ -1,15 +1,10 @@
 import asyncio
 import os
-import sys
 
 from dotenv import load_dotenv
-
 from crawler import start_crawler
 from database.database_manager import DatabaseManager
-import logging
-import sys
-
-from logger.logger import ColorizedArgsFormatter, BraceFormatStyleFormatter, logger
+from logger.logger import logger
 
 
 def load_env() -> (str, str, str):
@@ -36,6 +31,10 @@ async def main():
 
     # Run the spider.
 
+    # *****
+    # TODO: The frontier strategy needs to follow the breadth-first strategy. In the report explain how is your strategy implemented.
+    # *****
+
     # TODO: incorporate seed URLs
     # TODO: implement multi-threading with database locking
     # start crawling from each seed URL
@@ -56,6 +55,8 @@ async def main():
     # Test with robots.txt and small sitemap. 
     # It takes 20 seconds to build the URL tree
     # !!! The sitemap has irregular sitemap URLs !!! 
+    # await start_crawler(start_url='https://e-prostor.gov.si')
+
     await start_crawler()
 
     # Clean database manager.

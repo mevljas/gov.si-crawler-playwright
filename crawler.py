@@ -1,5 +1,4 @@
 import asyncio
-import socket
 import urllib.robotparser
 from urllib.parse import ParseResult
 from urllib.parse import urlparse
@@ -32,6 +31,24 @@ async def crawl_url(current_url: str, page: Page, robot_file_parser: RobotFilePa
     # Fix shortened URLs (if necessary).
     current_url = CrawlerHelper.fix_shortened_url(url=current_url)
 
+    # fetch page
+    # TODO: incorporate check for different file types other than HTML (.pdf, .doc, .docx, .ppt, .pptx)
+    try:
+        (url, html, status) = await CrawlerHelper.get_page(url=current_url, page=page)
+    except Exception as e:
+        logger.warning(f'Opening page {current_url} failed with an error {e}.')
+        return
+
+    # Convert actual page url to base/root url format
+    base_page_url = CrawlerHelper.get_base_url(url)
+    # Check if URL is a redirect by matching current_url and returned url and the reassigning
+    if current_url != base_page_url:
+        current_url = base_page_url
+        logger.debug(f'Current watched url {current_url} differs from actual browser url {base_page_url}. Redirect happened. Reassigning url.')
+    else:
+        logger.debug(f'Current watched url matches the actual browser url (i.e. no redirects happened).')
+
+
     # Parse url into a ParseResult object.
     current_url_parsed: ParseResult = urlparse(current_url)
 
@@ -58,26 +75,18 @@ async def crawl_url(current_url: str, page: Page, robot_file_parser: RobotFilePa
     # get robots.txt
     CrawlerHelper.load_robots_file(parsed_url=current_url_parsed, robot_file_parser=robot_file_parser)
 
-    # fetch page
-    # TODO: incorporate check for different file types other than HTML (.pdf, .doc, .docx, .ppt, .pptx)
-    try:
-        (html, status) = await CrawlerHelper.get_page(url=current_url, page=page)
-    except Exception as e:
-        logger.warning(f'Opening page {current_url} failed with an error {e}.')
-        return
-
     # extract any relevant data from the page here, using BeautifulSoup
     beautiful_soup = BeautifulSoup(html, "html.parser")
-
-    # get content
-    # content = CrawlerHelper.extract_text(beautiful_soup)
 
     # get URLs
     page_urls = CrawlerHelper.find_links(beautiful_soup, current_url_parsed, robot_file_parser=robot_file_parser)
 
+    # get images
+    images = CrawlerHelper.find_images(beautiful_soup, current_url_parsed)
+
     # Don't request sitemaps if the domain was already visited
     if domain not in domain_available_times.keys():
-        sitemap_urls = CrawlerHelper.find_sitemap_links(current_url_parsed, robot_file_parser=robot_file_parser)
+        sitemap_urls = CrawlerHelper.find_sitemap_links(current_url_parsed, robot_file_parser=robot_file_parser, wait_time=wait_time)
     else:
         sitemap_urls = set()
         logger.debug(f'Domain {domain} was already visited so sitemaps will be ignored.')
@@ -90,8 +99,7 @@ async def crawl_url(current_url: str, page: Page, robot_file_parser: RobotFilePa
 
     # TODO: check for duplicate page in Frontier
 
-    # TODO: save page content
-    # print(content)
+    # TODO: save page
     # TODO: save new URLs
     # CrawlerHelper.save_urls(urls=new_links, frontier=frontier)
     seed_urls.update(new_links)
@@ -115,6 +123,7 @@ async def start_crawler():
         # Prevent loading some resources for better performance.
         await page.route("**/*", CrawlerHelper.block_aggressively)
         robot_file_parser = urllib.robotparser.RobotFileParser()
+
         while seed_urls:  # While seed list is not empty
             for url in list(seed_urls):
                 try:
