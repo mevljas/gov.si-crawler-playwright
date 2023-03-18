@@ -57,6 +57,9 @@ async def main():
     database_manager = DatabaseManager()
     database_manager.create_database_engine(user=postgres_user, password=postgres_password, db=postgres_db)
 
+    # Drop existing tables
+    await database_manager.delete_tables()
+
     # Create database tables.
     await database_manager.create_models()
 

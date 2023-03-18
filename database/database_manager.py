@@ -39,3 +39,13 @@ class DatabaseManager:
         async with self._engine.begin() as conn:
             await conn.run_sync(meta.create_all)
         logger.debug('Finished creating ORM modules.')
+
+    async def delete_tables(self):
+        """
+        Deletes all tables from the database.
+        """
+        logger.debug('Deleting database tables.')
+        async with self._engine.begin() as conn:
+            await conn.run_sync(meta.reflect)
+            await conn.run_sync(meta.drop_all)
+        logger.debug('Finished deleting database tables.')

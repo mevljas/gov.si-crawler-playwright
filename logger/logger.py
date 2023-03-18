@@ -126,7 +126,7 @@ class BraceFormatStyleFormatter(logging.Formatter):
 
 def init_logging():
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.INFO)
+    root_logger.setLevel(logging.DEBUG)
 
     console_level = "DEBUG"
     console_handler = logging.StreamHandler(stream=sys.stdout)
