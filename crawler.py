@@ -82,7 +82,7 @@ async def crawl_url(current_url: str, page: Page, robot_file_parser: RobotFilePa
     page_urls = CrawlerHelper.find_links(beautiful_soup, current_url_parsed, robot_file_parser=robot_file_parser)
 
     # get images
-    images = CrawlerHelper.find_images(beautiful_soup, current_url_parsed)
+    page_images = CrawlerHelper.find_images(beautiful_soup)
 
     # Don't request sitemaps if the domain was already visited
     if domain not in domain_available_times.keys():

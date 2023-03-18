@@ -3,11 +3,13 @@ import asyncio
 import os
 import socket
 from time import time
+from datetime import datetime, timezone
 from urllib.parse import ParseResult, urlparse
 from urllib.robotparser import RobotFileParser
 
 import requests
 from bs4 import BeautifulSoup
+from database.models import Image
 from playwright.async_api import Page
 from url_normalize import url_normalize
 from w3lib.url import url_query_cleaner
@@ -83,13 +85,13 @@ class CrawlerHelper:
         return new_urls
 
     @staticmethod
-    def find_images(beautiful_soup: BeautifulSoup, current_url: ParseResult) -> set[(str, str)]:
+    def find_images(beautiful_soup: BeautifulSoup) -> set[Image]:
         """
         Get's verified HTML document and finds all images and returns them.
-        :param current_url: website url to extract links from
         :param beautiful_soup:  output of BeautifulSoup4 (i.e. validated and parsed HTML)
         """
         logger.debug(f'Finding images on the page.')
+        accessed_time = CrawlerHelper.get_iso_timestamp()
 
         # find img tags in DOM
         imgs = beautiful_soup.select('img')
@@ -113,15 +115,10 @@ class CrawlerHelper:
                 extension = ext[1:]  # remove the dot from the extension
             else:
                 continue         
-            
-            # TODO: Theoretically we do not need to get the actual image? Just filename and extension
-            # # Check if src is relative path
-            # if relative_url_regex.match(src):
-            #     full_path = current_url.scheme + '://' + current_url.netloc + src
-            # # Check if full url
-            # elif full_url_regex.match(src):
-            #     full_path = src
-            images.add((filename, extension))
+
+            # TODO: add page_id
+            image: Image = Image(filename=filename, content_type=extension, accessed_time=accessed_time)
+            images.add(image)
         return images
 
     @staticmethod
@@ -386,3 +383,10 @@ class CrawlerHelper:
         except:
             logger.warning(f'Getting site ip address failed.')
             return None
+    
+    @staticmethod
+    def get_iso_timestamp() -> datetime:
+        """
+        Returns current UTC timestamp in ISO format.
+        """
+        return datetime.now(timezone.utc)
