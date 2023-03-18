@@ -31,8 +31,14 @@ async def crawl_url(current_url: str, page: Page, robot_file_parser: RobotFilePa
     # Fix shortened URLs (if necessary).
     current_url = CrawlerHelper.fix_shortened_url(url=current_url)
 
+    # Check if URL leads to binary file
+    # TODO: save to page data table
+    (binary, data_type) = CrawlerHelper.check_if_binary(current_url)
+    if binary:
+        logger.info(f'Crawling url {current_url} finished, because url leads to binary file {data_type}.')
+        return
+
     # fetch page
-    # TODO: incorporate check for different file types other than HTML (.pdf, .doc, .docx, .ppt, .pptx)
     try:
         (url, html, status) = await CrawlerHelper.get_page(url=current_url, page=page)
     except Exception as e:
@@ -44,9 +50,9 @@ async def crawl_url(current_url: str, page: Page, robot_file_parser: RobotFilePa
     # Check if URL is a redirect by matching current_url and returned url and the reassigning
     if current_url != base_page_url:
         current_url = base_page_url
-        logger.debug(f'Current watched url {current_url} differs from actual browser url {base_page_url}. Redirect happened. Reassigning url.')
+        logger.info(f'Current watched url {current_url} differs from actual browser url {base_page_url}. Redirect happened. Reassigning url.')
     else:
-        logger.debug(f'Current watched url matches the actual browser url (i.e. no redirects happened).')
+        logger.info(f'Current watched url matches the actual browser url (i.e. no redirects happened).')
 
 
     # Parse url into a ParseResult object.
@@ -119,7 +125,7 @@ async def start_crawler():
     async with async_playwright() as playwright:
         chromium = playwright.chromium  # or "firefox" or "webkit".
         browser = await chromium.launch()
-        page = await browser.new_page()
+        page = await browser.new_page(user_agent=USER_AGENT)
         # Prevent loading some resources for better performance.
         await page.route("**/*", CrawlerHelper.block_aggressively)
         robot_file_parser = urllib.robotparser.RobotFileParser()
