@@ -16,12 +16,12 @@ domain_available_times = {}  # A set with domains next available times.
 ip_available_times = {}  # A set with ip next available times.
 
 
-async def crawl_url(current_url: str, page: Page, robot_file_parser: RobotFileParser,
-                    database_manager: DatabaseManager):
+async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: RobotFileParser,
+                    database_manager: DatabaseManager, page_id: int):
     """
     Crawls the provided current_url.
     :param current_url: Url to be crawled
-    :param page: Browser page
+    :param browser_page: Browser page
     :param robot_file_parser: parser for robots.txt
     :return:
     """
@@ -33,7 +33,7 @@ async def crawl_url(current_url: str, page: Page, robot_file_parser: RobotFilePa
     # fetch page
     # TODO: incorporate check for different file types other than HTML (.pdf, .doc, .docx, .ppt, .pptx)
     try:
-        (url, html, status) = await CrawlerHelper.get_page(url=current_url, page=page)
+        (url, html, status) = await CrawlerHelper.get_page(url=current_url, page=browser_page)
     except Exception as e:
         logger.warning(f'Opening page {current_url} failed with an error {e}.')
         return
@@ -95,11 +95,10 @@ async def crawl_url(current_url: str, page: Page, robot_file_parser: RobotFilePa
     # combine DOM and sitemap URLs
     new_links = page_urls.union(sitemap_urls)
 
-    # TODO: check for duplicate page in Frontier
+    # Save page to the database
+    await database_manager.save_page(page_id=page_id, html=html, status=status, )
 
-    # TODO: save page
-    # TODO: save new URLs
-    # CrawlerHelper.save_urls(urls=new_links, frontier=frontier)
+    # Add new urls to the frontier
     await database_manager.add_to_frontier(new_links)
 
     robot_delay = robot_file_parser.crawl_delay(USER_AGENT)
@@ -117,22 +116,23 @@ async def start_crawler(database_manager: DatabaseManager):
     async with async_playwright() as playwright:
         chromium = playwright.chromium  # or "firefox" or "webkit".
         browser = await chromium.launch()
-        newPage = await browser.new_page()
+        browser_page = await browser.new_page()
         # Prevent loading some resources for better performance.
-        await newPage.route("**/*", CrawlerHelper.block_aggressively)
+        await browser_page.route("**/*", CrawlerHelper.block_aggressively)
         robot_file_parser = urllib.robotparser.RobotFileParser()
 
         frontier = await database_manager.get_frontier()
 
-        while frontier:  # While seed list is not empty
+        while frontier:  # While frontier is not empty
             for page in frontier:
                 frontier_id, url = page
                 try:
-                    await crawl_url(current_url=url, page=newPage, robot_file_parser=robot_file_parser,
-                                    database_manager=database_manager)
+                    await crawl_url(current_url=url, browser_page=browser_page, robot_file_parser=robot_file_parser,
+                                    database_manager=database_manager, page_id=frontier_id)
                 except Exception as e:
                     logger.critical(f'Crawling url {url} failed with an error {e}.')
-                await database_manager.remove_from_frontier(id=frontier_id)
+                    # TODO: save status code
+                    await database_manager.remove_from_frontier(page_id=frontier_id)
                 logger.info('###########################################################################')
                 logger.info(f'Visited {await database_manager.get_visited_pages_count()} unique links.')
                 logger.info(f'Frontier contains {len(frontier)} unique links.')

@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from sqlalchemy import select, Row, ScalarResult, Result, Sequence, update, exc
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine, AsyncEngine, AsyncSession
 from sqlalchemy.sql.functions import count, func
@@ -90,7 +92,7 @@ class DatabaseManager:
                 logger.debug('Got visited pages count.')
                 return result
 
-    async def remove_from_frontier(self, id: int):
+    async def remove_from_frontier(self, page_id: int):
         """
         Removes a link from frontier.
         """
@@ -98,7 +100,8 @@ class DatabaseManager:
         async_session: async_sessionmaker[AsyncSession] = await self.get_session_maker()
         async with async_session() as session:
             async with session.begin():
-                await session.execute(update(Page).where(Page.id == id).values(page_type_code='HTML'))
+                # TODO: We should probably clear page_type_code instead of setting it to html?
+                await session.execute(update(Page).where(Page.id == page_id).values(page_type_code='HTML'))
                 await session.commit()
                 logger.debug('Link removed from the frontier.')
 
@@ -117,3 +120,20 @@ class DatabaseManager:
                     except exc.IntegrityError:
                         logger.debug('Adding links failed, some are already in the frontier.')
             logger.debug('Added links to the frontier.')
+
+    async def save_page(self, page_id: int, html: str, status: str):
+        """
+        Saved a visited page to the database.
+        """
+        logger.debug('Saving page to the database.')
+        async_session: async_sessionmaker[AsyncSession] = await self.get_session_maker()
+        async with async_session() as session:
+            async with session.begin():
+                await session.execute(
+                    update(Page).where(Page.id == page_id).values(page_type_code='HTML',
+                                                                  html_content=html,
+                                                                  http_status_code=status,
+                                                                  accessed_time=datetime.now()))
+                await session.commit()
+
+            logger.debug('Page saved to the database.')
