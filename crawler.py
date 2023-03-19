@@ -31,8 +31,14 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
     # Fix shortened URLs (if necessary).
     current_url = CrawlerHelper.fix_shortened_url(url=current_url)
 
+    # Check if URL leads to binary file
+    # TODO: save to page data table
+    (binary, data_type) = CrawlerHelper.check_if_binary(current_url)
+    if binary:
+        logger.info(f'Crawling url {current_url} finished, because url leads to binary file {data_type}.')
+        return
+
     # fetch page
-    # TODO: incorporate check for different file types other than HTML (.pdf, .doc, .docx, .ppt, .pptx)
     try:
         (url, html, status) = await CrawlerHelper.get_page(url=current_url, page=browser_page)
     except Exception as e:
@@ -59,6 +65,7 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
     # Convert actual page url to base/root url format
     base_page_url = CrawlerHelper.get_base_url(url)
     # Check if URL is a redirect by matching current_url and returned url and the reassigning
+    # Only checking HTTP response status for direct is most likely not enough since there could be a redirect with JS
     if current_url != base_page_url:
         current_url = base_page_url
         logger.debug(
@@ -93,6 +100,7 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
     beautiful_soup = BeautifulSoup(html, "html.parser")
 
     # get images
+    # TODO: save images
     page_images = CrawlerHelper.find_images(beautiful_soup)
 
     # Get saved site from the database (if exists)

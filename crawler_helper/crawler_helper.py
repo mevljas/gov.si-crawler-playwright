@@ -1,3 +1,4 @@
+from mimetypes import guess_type
 import re
 import asyncio
 import os
@@ -9,13 +10,13 @@ from urllib.robotparser import RobotFileParser
 
 import requests
 from bs4 import BeautifulSoup
-from database.models import Image
+from database.models import DataType, Image
 from playwright.async_api import Page
 from url_normalize import url_normalize
 from w3lib.url import url_query_cleaner
 
 from crawler_helper.constants import navigation_assign_regex, navigation_func_regex, USER_AGENT, govsi_regex, \
-    full_url_regex, default_domain_delay, excluded_resource_types, relative_url_regex, image_extensions
+    full_url_regex, default_domain_delay, excluded_resource_types, image_extensions, binary_file_extensions
 from logger.logger import logger
 
 
@@ -116,8 +117,9 @@ class CrawlerHelper:
             else:
                 continue
 
-                # TODO: add page_id
-            image: Image = Image(filename=filename, content_type=extension, accessed_time=accessed_time)
+            # TODO: add page_id
+            (mime, _) = guess_type(src)
+            image: Image = Image(filename=filename, content_type=mime, accessed_time=accessed_time)
             images.add(image)
         return images
 
@@ -259,6 +261,20 @@ class CrawlerHelper:
             frontier.add(url)
             logger.debug(f'Adding url {url} to frontier.')
         logger.info(f'Saved {len(url_list)} urls.')
+
+    @staticmethod
+    def check_if_binary(url: str) -> (bool, DataType):
+        """
+        Check if url leads to binary file
+        """
+        for ext in binary_file_extensions:
+            if ext in url:
+                logger.debug(f'Url {url} points to binary file.')
+                dt: DataType = ext[1:].upper() # convert from file extension (.pdf) to enum (PDF)
+                return (True, dt)
+
+        logger.debug(f'Url {url} does not point to a binary file.')
+        return (False, None)
 
     @staticmethod
     def fill_url(url: str, current_url_parsed: ParseResult) -> str:
