@@ -35,5 +35,5 @@ default_domain_delay = 5  # seconds
 # Resource types that will be blocked.
 excluded_resource_types = ["image", "font", "media"]
 
-# Image file extensions
 image_extensions = ['.jpg', '.jpeg', '.jfif', '.pjpeg', '.pjp', '.png', '.apng', '.avif', '.gif', '.webp', '.svg', '.eps', '.pdf', '.ico', '.cur', '.tif', '.tiff', '.bmp']
+binary_file_extensions = ['.pdf', '.doc', '.docx', '.ppt', '.pptx']
