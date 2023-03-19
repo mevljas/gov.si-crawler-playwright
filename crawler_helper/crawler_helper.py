@@ -331,7 +331,7 @@ class CrawlerHelper:
             robot_file_parser.set_url(robots_url)
             robot_file_parser.read()
         except:
-            logger.warning(f'Getting robots.txt with url {robots_url} failed.')
+            logger.debug(f'Getting robots.txt with url {robots_url} failed.')
             return None
 
     @staticmethod

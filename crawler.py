@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import urllib.robotparser
 from urllib.parse import ParseResult
 from urllib.parse import urlparse
@@ -39,6 +40,21 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
         await database_manager.remove_from_frontier(page_id=page_id)
         logger.warning(f'Opening page {current_url} failed with an error {e}.')
         return
+    # Generate html hash
+    html_hash = hashlib.sha256(html.encode('utf-8')).hexdigest()
+
+    # Check whether the html hash matches any other hash in the database.
+    page_collision = await database_manager.check_pages_hash_collision(html_hash=html_hash)
+    if page_collision is not None:
+        original_page_id, original_site_id = page_collision
+        await database_manager.save_page(page_id=page_id,
+                                         status=status,
+                                         site_id=original_site_id,
+                                         page_type_code='DUPLICATE'
+                                         )
+        await database_manager.add_page_link(original_page_id=original_page_id, duplicate_page_id=page_id)
+        logger.info(f'Url {current_url} is a duplicate of another page.')
+        return
 
     # Convert actual page url to base/root url format
     base_page_url = CrawlerHelper.get_base_url(url)
@@ -61,6 +77,7 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
 
     # If the DNS request failed it probably doesn't work.
     if ip is None:
+        logger.info(f'DNS request failed for url {current_url}.')
         return
 
     # Get wait time between calls to the same domain and ip address
@@ -100,12 +117,17 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
             robot_file_parser=robot_file_parser,
             wait_time=wait_time)
 
+        # TODO: Can we remove 'www' subdomain?
         site_id = await database_manager.save_site(domain=domain,
                                                    sitemap_content=','.join(robot_file_parser.site_maps()),
                                                    robots_content=robot_file_parser.__str__())
 
     # Save page to the database
-    await database_manager.save_page(page_id=page_id, html=html, status=status, site_id=site_id)
+    await database_manager.save_page(page_id=page_id,
+                                     html=html,
+                                     status=status,
+                                     site_id=site_id,
+                                     html_hash=html_hash)
 
     # combine DOM and sitemap URLs
     new_links = page_urls.union(sitemap_urls)

@@ -4,7 +4,7 @@ from sqlalchemy import select, Row, ScalarResult, Result, Sequence, update, exc,
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine, AsyncEngine, AsyncSession
 from sqlalchemy.sql.functions import count, func
 
-from database.models import meta, Page, Site
+from database.models import meta, Page, Site, Link
 from logger.logger import logger
 
 
@@ -133,7 +133,7 @@ class DatabaseManager:
                         logger.debug('Adding links failed, some are already in the frontier.')
             logger.debug('Added links to the frontier.')
 
-    async def save_page(self, page_id: int, html: str, status: str, site_id: int):
+    async def save_page(self, page_id: int, status: str, site_id: int, html: str = None, html_hash: str = None,page_type_code: str='HTML'):
         """
         Saved a visited page to the database.
         """
@@ -142,11 +142,12 @@ class DatabaseManager:
         async with async_session() as session:
             async with session.begin():
                 await session.execute(
-                    update(Page).where(Page.id == page_id).values(page_type_code='HTML',
+                    update(Page).where(Page.id == page_id).values(page_type_code=page_type_code,
                                                                   html_content=html,
                                                                   http_status_code=status,
                                                                   site_id=site_id,
-                                                                  accessed_time=datetime.now()))
+                                                                  accessed_time=datetime.now(),
+                                                                  html_content_hash=html_hash))
                 await session.commit()
 
             logger.debug('Page saved to the database.')
@@ -184,3 +185,36 @@ class DatabaseManager:
                     return page.id, page.domain, page.robots_content, page.sitemap_content
                 logger.debug('The site hasnt been found in the database.')
                 return None
+
+    async def check_pages_hash_collision(self, html_hash: str) -> (int, int):
+        """
+        Check the database for duplicate pages and return the original page's id.
+        """
+        logger.debug('Checking the database for duplicate pages..')
+        async_session: async_sessionmaker[AsyncSession] = await self.get_session_maker()
+        async with async_session() as session:
+            async with session.begin():
+                result: Result = await session \
+                    .execute(select(Page)
+                             .with_only_columns(Page.id, Page.site_id)
+                             .where(Page.html_content_hash == html_hash))
+                page = result.first()
+                if page is not None:
+                    page_id = page.id
+                    logger.debug(f'Duplicate found with an id {page_id}.')
+                    return page_id, page.site_id
+                logger.debug('Duplicate page hasnt been found.')
+                return None
+
+    async def add_page_link(self, original_page_id: int, duplicate_page_id: int):
+        """
+        Adds a new page duplicate link.
+        """
+        logger.debug('Adding a new page duplicate link.')
+        async_session: async_sessionmaker[AsyncSession] = await self.get_session_maker()
+        async with async_session() as session:
+            async with session.begin():
+                session.add(Link(from_page=duplicate_page_id, to_page=original_page_id))
+                await session.commit()
+
+            logger.debug('Duplicate link added successfully.')

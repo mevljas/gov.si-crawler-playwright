@@ -41,6 +41,7 @@ class Page(Base):
     page_type_code: Mapped[String] = Column(ForeignKey('page_type.code', ondelete='RESTRICT'), index=True)
     url: Mapped[String] = Column(String(3000), unique=True)
     html_content: Mapped[String] = Column(Text)
+    html_content_hash: Mapped[String] = Column(Text, unique=True)
     http_status_code: Mapped[int] = Column(Integer)
     accessed_time = Column(DateTime)
 
