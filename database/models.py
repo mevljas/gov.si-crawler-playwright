@@ -6,7 +6,6 @@ meta = MetaData(schema="crawldb")
 Base = declarative_base(metadata=meta)
 
 
-
 class DataType(Base):
     """
     Available values: PDF, DOC, DOCX, PPT, PPTX
@@ -42,6 +41,7 @@ class Page(Base):
     page_type_code: Mapped[String] = Column(ForeignKey('page_type.code', ondelete='RESTRICT'), index=True)
     url: Mapped[String] = Column(String(3000), unique=True)
     html_content: Mapped[String] = Column(Text)
+    html_content_hash: Mapped[String] = Column(Text, unique=True)
     http_status_code: Mapped[int] = Column(Integer)
     accessed_time = Column(DateTime)
 
@@ -67,8 +67,9 @@ class Link(Base):
     __tablename__ = 'link'
 
     from_page: Mapped[int] = Column(ForeignKey('page.id', ondelete='RESTRICT'), primary_key=True, nullable=False,
-                       index=True)
-    to_page: Mapped[int] = Column(ForeignKey('page.id', ondelete='RESTRICT'), primary_key=True, nullable=False, index=True)
+                                    index=True)
+    to_page: Mapped[int] = Column(ForeignKey('page.id', ondelete='RESTRICT'), primary_key=True, nullable=False,
+                                  index=True)
     relationship(back_populates="children")
 
 

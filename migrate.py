@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
 from database.database_manager import DatabaseManager
-from database.models import meta, DataType, PageType
+from database.models import meta, DataType, PageType, Site, Page
 import logging
 
 from logger.logger import ColorizedArgsFormatter, BraceFormatStyleFormatter, logger
@@ -42,8 +42,13 @@ async def seed_default(async_session_maker: async_sessionmaker[AsyncSession]):
                     PageType(code='BINARY'),
                     PageType(code='DUPLICATE'),
                     PageType(code='FRONTIER'),
+                    Page(url='https://gov.si', page_type_code='FRONTIER'),
+                    Page(url='https://evem.gov.si', page_type_code='FRONTIER'),
+                    Page(url='https://e-uprava.gov.si', page_type_code='FRONTIER'),
+                    Page(url='https://e-prostor.gov.si', page_type_code='FRONTIER')
                 ]
             )
+            await session.commit()
     logging.debug('Seeding the database finished.')
 
 
@@ -56,6 +61,9 @@ async def main():
     # Setup database manager.
     database_manager = DatabaseManager()
     database_manager.create_database_engine(user=postgres_user, password=postgres_password, db=postgres_db)
+
+    # Drop existing tables
+    await database_manager.delete_tables()
 
     # Create database tables.
     await database_manager.create_models()

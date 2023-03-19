@@ -57,7 +57,7 @@ async def main():
     # !!! The sitemap has irregular sitemap URLs !!! 
     # await start_crawler(start_url='https://e-prostor.gov.si')
 
-    await start_crawler()
+    await start_crawler(database_manager=database_manager)
 
     # Clean database manager.
     await database_manager.cleanup()
