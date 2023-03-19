@@ -9,16 +9,15 @@ from playwright.async_api import async_playwright, Page
 
 from crawler_helper.constants import USER_AGENT
 from crawler_helper.crawler_helper import CrawlerHelper
+from database.database_manager import DatabaseManager
 from logger.logger import logger
 
-already_visited_links = set()  # keep track of visited links to avoid crawling them again
-frontier = set()  # keep track of not visited links
-seed_urls = {'https://gov.si', 'https://evem.gov.si', 'https://e-uprava.gov.si', 'https://e-prostor.gov.si'}
 domain_available_times = {}  # A set with domains next available times.
 ip_available_times = {}  # A set with ip next available times.
 
 
-async def crawl_url(current_url: str, page: Page, robot_file_parser: RobotFileParser):
+async def crawl_url(current_url: str, page: Page, robot_file_parser: RobotFileParser,
+                    database_manager: DatabaseManager):
     """
     Crawls the provided current_url.
     :param current_url: Url to be crawled
@@ -31,14 +30,8 @@ async def crawl_url(current_url: str, page: Page, robot_file_parser: RobotFilePa
     # Fix shortened URLs (if necessary).
     current_url = CrawlerHelper.fix_shortened_url(url=current_url)
 
-    # Check if URL leads to binary file
-    # TODO: save to page data table
-    (binary, data_type) = CrawlerHelper.check_if_binary(current_url)
-    if binary:
-        logger.info(f'Crawling url {current_url} finished, because url leads to binary file {data_type}.')
-        return
-
     # fetch page
+    # TODO: incorporate check for different file types other than HTML (.pdf, .doc, .docx, .ppt, .pptx)
     try:
         (url, html, status) = await CrawlerHelper.get_page(url=current_url, page=page)
     except Exception as e:
@@ -50,10 +43,10 @@ async def crawl_url(current_url: str, page: Page, robot_file_parser: RobotFilePa
     # Check if URL is a redirect by matching current_url and returned url and the reassigning
     if current_url != base_page_url:
         current_url = base_page_url
-        logger.info(f'Current watched url {current_url} differs from actual browser url {base_page_url}. Redirect happened. Reassigning url.')
+        logger.debug(
+            f'Current watched url {current_url} differs from actual browser url {base_page_url}. Redirect happened. Reassigning url.')
     else:
-        logger.info(f'Current watched url matches the actual browser url (i.e. no redirects happened).')
-
+        logger.debug(f'Current watched url matches the actual browser url (i.e. no redirects happened).')
 
     # Parse url into a ParseResult object.
     current_url_parsed: ParseResult = urlparse(current_url)
@@ -69,7 +62,8 @@ async def crawl_url(current_url: str, page: Page, robot_file_parser: RobotFilePa
         return
 
     # Get wait time between calls to the same domain and ip address
-    wait_time = CrawlerHelper.get_site_wait_time(domain_available_times=domain_available_times, domain=domain, ip_available_times=ip_available_times, ip=ip)
+    wait_time = CrawlerHelper.get_site_wait_time(domain_available_times=domain_available_times, domain=domain,
+                                                 ip_available_times=ip_available_times, ip=ip)
     if wait_time > 0:
         logger.debug(f'Required waiting time for the domain {domain} is {wait_time} seconds.')
         await asyncio.sleep(wait_time)
@@ -92,7 +86,8 @@ async def crawl_url(current_url: str, page: Page, robot_file_parser: RobotFilePa
 
     # Don't request sitemaps if the domain was already visited
     if domain not in domain_available_times.keys():
-        sitemap_urls = CrawlerHelper.find_sitemap_links(current_url_parsed, robot_file_parser=robot_file_parser, wait_time=wait_time)
+        sitemap_urls = await CrawlerHelper.find_sitemap_links(current_url_parsed, robot_file_parser=robot_file_parser,
+                                                              wait_time=wait_time)
     else:
         sitemap_urls = set()
         logger.debug(f'Domain {domain} was already visited so sitemaps will be ignored.')
@@ -100,15 +95,12 @@ async def crawl_url(current_url: str, page: Page, robot_file_parser: RobotFilePa
     # combine DOM and sitemap URLs
     new_links = page_urls.union(sitemap_urls)
 
-    # skip crawling already visited links
-    new_links = new_links - already_visited_links
-
     # TODO: check for duplicate page in Frontier
 
     # TODO: save page
     # TODO: save new URLs
     # CrawlerHelper.save_urls(urls=new_links, frontier=frontier)
-    seed_urls.update(new_links)
+    await database_manager.add_to_frontier(new_links)
 
     robot_delay = robot_file_parser.crawl_delay(USER_AGENT)
     CrawlerHelper.save_site_available_time(domain_available_times=domain_available_times, domain=domain,
@@ -117,7 +109,7 @@ async def crawl_url(current_url: str, page: Page, robot_file_parser: RobotFilePa
     logger.info(f'Crawling url {current_url} finished.')
 
 
-async def start_crawler():
+async def start_crawler(database_manager: DatabaseManager):
     """
     Setups the playwright library and starts the crawler.
     """
@@ -125,23 +117,27 @@ async def start_crawler():
     async with async_playwright() as playwright:
         chromium = playwright.chromium  # or "firefox" or "webkit".
         browser = await chromium.launch()
-        page = await browser.new_page(user_agent=USER_AGENT)
+        newPage = await browser.new_page()
         # Prevent loading some resources for better performance.
-        await page.route("**/*", CrawlerHelper.block_aggressively)
+        await newPage.route("**/*", CrawlerHelper.block_aggressively)
         robot_file_parser = urllib.robotparser.RobotFileParser()
 
-        while seed_urls:  # While seed list is not empty
-            for url in list(seed_urls):
+        frontier = await database_manager.get_frontier()
+
+        while frontier:  # While seed list is not empty
+            for page in frontier:
+                frontier_id, url = page
                 try:
-                    await crawl_url(current_url=url, page=page, robot_file_parser=robot_file_parser)
+                    await crawl_url(current_url=url, page=newPage, robot_file_parser=robot_file_parser,
+                                    database_manager=database_manager)
                 except Exception as e:
                     logger.critical(f'Crawling url {url} failed with an error {e}.')
-                already_visited_links.add(url)
-                seed_urls.remove(url)
+                await database_manager.remove_from_frontier(id=frontier_id)
                 logger.info('###########################################################################')
-                logger.info(f'Already visited {len(already_visited_links)} unique links.')
-                logger.info(f'Will visit additional {len(seed_urls)} unique links.')
+                logger.info(f'Visited {await database_manager.get_visited_pages_count()} unique links.')
+                logger.info(f'Frontier contains {len(frontier)} unique links.')
                 logger.info('###########################################################################')
+                frontier = await database_manager.get_frontier()
 
         await browser.close()
     logger.info(f'Crawler finished.')

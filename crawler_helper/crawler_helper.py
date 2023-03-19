@@ -1,21 +1,21 @@
 import re
+import asyncio
 import os
 import socket
-from time import time, sleep
+from time import time
 from datetime import datetime, timezone
 from urllib.parse import ParseResult, urlparse
 from urllib.robotparser import RobotFileParser
-from mimetypes import guess_type
 
 import requests
 from bs4 import BeautifulSoup
-from database.models import DataType, Image
+from database.models import Image
 from playwright.async_api import Page
 from url_normalize import url_normalize
 from w3lib.url import url_query_cleaner
 
 from crawler_helper.constants import navigation_assign_regex, navigation_func_regex, USER_AGENT, govsi_regex, \
-    full_url_regex, default_domain_delay, excluded_resource_types, image_extensions, binary_file_extensions
+    full_url_regex, default_domain_delay, excluded_resource_types, relative_url_regex, image_extensions
 from logger.logger import logger
 
 
@@ -113,18 +113,16 @@ class CrawlerHelper:
             elif ext.lower() in image_extensions:
                 filename = name
                 extension = ext[1:]  # remove the dot from the extension
-            # Ignore any other non standard src values
             else:
-                continue         
+                continue
 
-            # TODO: add page_id
-            (mime, _) = guess_type(src)
-            image: Image = Image(filename=filename, content_type=mime, accessed_time=accessed_time)
+                # TODO: add page_id
+            image: Image = Image(filename=filename, content_type=extension, accessed_time=accessed_time)
             images.add(image)
         return images
 
     @staticmethod
-    def find_sitemap_links(current_url: ParseResult, robot_file_parser: RobotFileParser, wait_time: int) -> set[str]:
+    async def find_sitemap_links(current_url: ParseResult, robot_file_parser: RobotFileParser, wait_time: int) -> set[str]:
         """
         Checks for sitemap.xml file and recursively traverses the tree to find all URLs.
         :param robot_file_parser: parser for robots.txt
@@ -138,11 +136,11 @@ class CrawlerHelper:
         if sitemaps is not None:
             for sitemap in sitemaps:
                 # parse/fetch found sitemaps and add their URLs
-                new_urls_sitemap.update(CrawlerHelper.get_sitemap_urls(CrawlerHelper, sitemap))
+                new_urls_sitemap.update(await CrawlerHelper.get_sitemap_urls(CrawlerHelper, sitemap))
         else:
             # even though sitemap is not in robots.txt, try to find it in root
             sitemap = current_url.scheme + '://' + current_url.netloc + '/sitemap.xml'
-            new_urls_sitemap.update(CrawlerHelper.get_sitemap_urls(CrawlerHelper, sitemap))
+            new_urls_sitemap.update(await CrawlerHelper.get_sitemap_urls(CrawlerHelper, sitemap))
 
         # translate URLs to canonical form
         new_urls_sitemap = CrawlerHelper.canonicalize(new_urls_sitemap)
@@ -150,12 +148,13 @@ class CrawlerHelper:
         return new_urls_sitemap
 
     @staticmethod
-    def get_sitemap_urls(self, sitemap_url, new_urls=None, wait_time: int=default_domain_delay) -> set[str]:
+    async def get_sitemap_urls(self, sitemap_url, new_urls=None, wait_time: int = default_domain_delay) -> set[str]:
         """
         From given root sitemap url, visting all .xml child routes and return leaf nodes as a new set of URLs
         This is a recursive function.
         """
-        CrawlerHelper.delay(wait_time)
+        logger.debug(f'Sleeping for {wait_time}.')
+        await asyncio.sleep(wait_time)
         logger.debug(f'Looking at sitemap {sitemap_url} for new urls.')
         sitemap = requests.get(sitemap_url)
         if sitemap.status_code != 200:
@@ -173,19 +172,19 @@ class CrawlerHelper:
             url = loc.get_text()
 
             if url.endswith('.xml') or 'sitemap.xml' in url:
-                new_urls.update(self.get_sitemap_urls(self, url, new_urls))
+                new_urls.update(await self.get_sitemap_urls(self, url, new_urls))
             else:
                 new_urls.add(url)
 
         return new_urls
 
     @staticmethod
-    def delay(wait_time: int) -> None:
+    def delay() -> None:
         """
         Wait web crawler delay. Not to be used for playwright!
         """
-        logger.debug(f'Delay for {wait_time} seconds')
-        sleep(wait_time)
+        logger.debug(f'Delay for {CrawlerHelper.domain_delay} seconds')
+        time.sleep(CrawlerHelper.domain_delay)
         return None
 
     @staticmethod
@@ -259,20 +258,6 @@ class CrawlerHelper:
             frontier.add(url)
             logger.debug(f'Adding url {url} to frontier.')
         logger.info(f'Saved {len(url_list)} urls.')
-
-    @staticmethod
-    def check_if_binary(url: str) -> (bool, DataType):
-        """
-        Check if url leads to binary file
-        """
-        for ext in binary_file_extensions:
-            if ext in url:
-                logger.debug(f'Url {url} points to binary file.')
-                dt: DataType = ext[1:].upper() # convert from file extension (.pdf) to enum (PDF)
-                return (True, dt)
-
-        logger.debug(f'Url {url} does not point to a binary file.')
-        return (False, None)
 
     @staticmethod
     def fill_url(url: str, current_url_parsed: ParseResult) -> str:
@@ -399,7 +384,7 @@ class CrawlerHelper:
         except:
             logger.warning(f'Getting site ip address failed.')
             return None
-    
+
     @staticmethod
     def get_iso_timestamp() -> datetime:
         """
