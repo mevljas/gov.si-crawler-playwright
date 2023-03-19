@@ -99,9 +99,9 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
     # extract any relevant data from the page here, using BeautifulSoup
     beautiful_soup = BeautifulSoup(html, "html.parser")
 
-    # get images
-    # TODO: save images
-    page_images = CrawlerHelper.find_images(beautiful_soup)
+    # get and save images
+    page_images = CrawlerHelper.find_images(beautiful_soup, page_id=page_id)
+    await database_manager.save_images(images=list(page_images))
 
     # Get saved site from the database (if exists)
     saved_site = await database_manager.get_site(domain=domain)

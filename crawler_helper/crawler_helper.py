@@ -86,13 +86,13 @@ class CrawlerHelper:
         return new_urls
 
     @staticmethod
-    def find_images(beautiful_soup: BeautifulSoup) -> set[Image]:
+    def find_images(beautiful_soup: BeautifulSoup, page_id: int) -> set[Image]:
         """
         Get's verified HTML document and finds all images and returns them.
         :param beautiful_soup:  output of BeautifulSoup4 (i.e. validated and parsed HTML)
         """
         logger.debug(f'Finding images on the page.')
-        accessed_time = CrawlerHelper.get_iso_timestamp()
+        accessed_time = datetime.now()
 
         # find img tags in DOM
         imgs = beautiful_soup.select('img')
@@ -117,9 +117,8 @@ class CrawlerHelper:
             else:
                 continue
 
-            # TODO: add page_id
             (mime, _) = guess_type(src)
-            image: Image = Image(filename=filename, content_type=mime, accessed_time=accessed_time)
+            image: Image = Image(filename=filename, content_type=mime, accessed_time=accessed_time, page_id=page_id)
             images.add(image)
         return images
 

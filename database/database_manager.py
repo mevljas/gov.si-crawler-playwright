@@ -4,7 +4,7 @@ from sqlalchemy import select, Row, ScalarResult, Result, Sequence, update, exc,
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine, AsyncEngine, AsyncSession
 from sqlalchemy.sql.functions import count, func
 
-from database.models import meta, Page, Site, Link
+from database.models import meta, Page, Site, Link, Image
 from logger.logger import logger
 
 
@@ -218,3 +218,15 @@ class DatabaseManager:
                 await session.commit()
 
             logger.debug('Duplicate link added successfully.')
+
+    async def save_images(self, images: list[Image]):
+        """
+        Saves new images to the database.
+        """
+        logger.debug('Saving images to the database.')
+        async_session: async_sessionmaker[AsyncSession] = await self.get_session_maker()
+        async with async_session() as session:
+            async with session.begin():
+                session.add_all(images)
+                await session.commit()
+            logger.debug('Images saved to the database.')
