@@ -114,9 +114,11 @@ async def start_crawler(database_manager: DatabaseManager):
     """
     logger.info(f'Starting the crawler.')
     async with async_playwright() as playwright:
-        chromium = playwright.chromium  # or "firefox" or "webkit".
-        browser = await chromium.launch()
-        browser_page = await browser.new_page()
+        browser = await playwright.chromium.launch() # or "firefox" or "webkit".
+        # create a new incognito browser context.
+        context = await browser.new_context(ignore_https_errors=True, user_agent=USER_AGENT)
+        # create a new page in a pristine context.
+        browser_page = await context.new_page()
         # Prevent loading some resources for better performance.
         await browser_page.route("**/*", CrawlerHelper.block_aggressively)
         robot_file_parser = urllib.robotparser.RobotFileParser()
@@ -127,8 +129,11 @@ async def start_crawler(database_manager: DatabaseManager):
             for page in frontier:
                 frontier_id, url = page
                 try:
-                    await crawl_url(current_url=url, browser_page=browser_page, robot_file_parser=robot_file_parser,
-                                    database_manager=database_manager, page_id=frontier_id)
+                    await crawl_url(current_url=url,
+                                    browser_page=browser_page,
+                                    robot_file_parser=robot_file_parser,
+                                    database_manager=database_manager,
+                                    page_id=frontier_id)
                 except Exception as e:
                     logger.critical(f'Crawling url {url} failed with an error {e}.')
                     # TODO: save status code
