@@ -1,10 +1,10 @@
 from datetime import datetime
 
-from sqlalchemy import select, Row, ScalarResult, Result, Sequence, update, exc
+from sqlalchemy import select, Row, ScalarResult, Result, Sequence, update, exc, delete
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine, AsyncEngine, AsyncSession
 from sqlalchemy.sql.functions import count, func
 
-from database.models import meta, Page
+from database.models import meta, Page, Site
 from logger.logger import logger
 
 
@@ -92,6 +92,19 @@ class DatabaseManager:
                 logger.debug('Got visited pages count.')
                 return result
 
+    async def mark_page_visited(self, page_id: int, page_type_code: str = 'HTML'):
+        """
+        Marks a page as visited.
+        """
+        logger.debug('Marking page as visited.')
+        async_session: async_sessionmaker[AsyncSession] = await self.get_session_maker()
+        async with async_session() as session:
+            async with session.begin():
+                # TODO: We should probably clear page_type_code instead of setting it to html?
+                await session.execute(update(Page).where(Page.id == page_id).values(page_type_code=page_type_code))
+                await session.commit()
+                logger.debug('Page marked as visited.')
+
     async def remove_from_frontier(self, page_id: int):
         """
         Removes a link from frontier.
@@ -100,8 +113,7 @@ class DatabaseManager:
         async_session: async_sessionmaker[AsyncSession] = await self.get_session_maker()
         async with async_session() as session:
             async with session.begin():
-                # TODO: We should probably clear page_type_code instead of setting it to html?
-                await session.execute(update(Page).where(Page.id == page_id).values(page_type_code='HTML'))
+                await session.execute(delete(Page).where(Page.id == page_id))
                 await session.commit()
                 logger.debug('Link removed from the frontier.')
 
@@ -121,7 +133,7 @@ class DatabaseManager:
                         logger.debug('Adding links failed, some are already in the frontier.')
             logger.debug('Added links to the frontier.')
 
-    async def save_page(self, page_id: int, html: str, status: str):
+    async def save_page(self, page_id: int, html: str, status: str, site_id: int):
         """
         Saved a visited page to the database.
         """
@@ -133,7 +145,42 @@ class DatabaseManager:
                     update(Page).where(Page.id == page_id).values(page_type_code='HTML',
                                                                   html_content=html,
                                                                   http_status_code=status,
+                                                                  site_id=site_id,
                                                                   accessed_time=datetime.now()))
                 await session.commit()
 
             logger.debug('Page saved to the database.')
+
+    async def save_site(self, domain: str, robots_content: str, sitemap_content) -> int:
+        """
+        Saved a visited site to the database.
+        Return a site's id.
+        """
+        logger.debug('Saving site to the database.')
+        async_session: async_sessionmaker[AsyncSession] = await self.get_session_maker()
+        site_id: int
+        async with async_session() as session:
+            new_site: Site = Site(domain=domain, robots_content=robots_content, sitemap_content=sitemap_content)
+            async with session.begin():
+                session.add(new_site)
+                await session.flush()
+                site_id = new_site.id
+                await session.commit()
+            logger.debug(f'Site saved to the database with an id {site_id}.')
+            return site_id
+
+    async def get_site(self, domain: str) -> (int, str, str, str):
+        """
+        Gets the site from the database.
+        """
+        logger.debug('Getting the site from the database.')
+        async_session: async_sessionmaker[AsyncSession] = await self.get_session_maker()
+        async with async_session() as session:
+            async with session.begin():
+                result: Result = await session.execute(select(Site).where(Site.domain == domain))
+                page = result.scalars().first()
+                if page is not None:
+                    logger.debug('Got the site from the database.')
+                    return page.id, page.domain, page.robots_content, page.sitemap_content
+                logger.debug('The site hasnt been found in the database.')
+                return None

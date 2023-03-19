@@ -122,7 +122,8 @@ class CrawlerHelper:
         return images
 
     @staticmethod
-    async def find_sitemap_links(current_url: ParseResult, robot_file_parser: RobotFileParser, wait_time: int) -> set[str]:
+    async def find_sitemap_links(current_url: ParseResult, robot_file_parser: RobotFileParser, wait_time: int) -> set[
+        str]:
         """
         Checks for sitemap.xml file and recursively traverses the tree to find all URLs.
         :param robot_file_parser: parser for robots.txt
@@ -320,9 +321,9 @@ class CrawlerHelper:
         return parsed_url.scheme + '://' + parsed_url.netloc + '/'
 
     @staticmethod
-    def load_robots_file(parsed_url: ParseResult, robot_file_parser: RobotFileParser) -> None:
+    def load_robots_file_url(parsed_url: ParseResult, robot_file_parser: RobotFileParser) -> None:
         """
-        Finds and parser site's robots.txt file.
+        Finds and parser site's robots.txt file from an url.
         """
         robots_url = parsed_url.scheme + '://' + parsed_url.netloc + '/robots.txt'
         logger.debug(f'Getting robots.txt with url {robots_url}.')
@@ -330,7 +331,19 @@ class CrawlerHelper:
             robot_file_parser.set_url(robots_url)
             robot_file_parser.read()
         except:
-            logger.debug(f'Getting robots.txt with url {robots_url} failed.')
+            logger.warning(f'Getting robots.txt with url {robots_url} failed.')
+            return None
+
+    @staticmethod
+    def load_saved_robots(robots_content: str, robot_file_parser: RobotFileParser) -> None:
+        """
+        Loads saved site's robots.txt.
+        """
+        logger.debug('Loading saved robots.txt.')
+        try:
+            robot_file_parser.parse(robots_content)
+        except:
+            logger.warning(f'Loading saved robots.txt failed.')
             return None
 
     @staticmethod

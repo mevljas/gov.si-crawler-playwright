@@ -35,6 +35,8 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
     try:
         (url, html, status) = await CrawlerHelper.get_page(url=current_url, page=browser_page)
     except Exception as e:
+        # TODO: maybe we should keep the page as visited instead of removing it and trying again?
+        await database_manager.remove_from_frontier(page_id=page_id)
         logger.warning(f'Opening page {current_url} failed with an error {e}.')
         return
 
@@ -70,40 +72,54 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
     else:
         logger.debug(f'Waiting for accessing the domain {domain} is not required.')
 
-    # TODO: mark as visited in Frontier
-
-    # get robots.txt
-    CrawlerHelper.load_robots_file(parsed_url=current_url_parsed, robot_file_parser=robot_file_parser)
-
     # extract any relevant data from the page here, using BeautifulSoup
     beautiful_soup = BeautifulSoup(html, "html.parser")
-
-    # get URLs
-    page_urls = CrawlerHelper.find_links(beautiful_soup, current_url_parsed, robot_file_parser=robot_file_parser)
 
     # get images
     page_images = CrawlerHelper.find_images(beautiful_soup)
 
-    # Don't request sitemaps if the domain was already visited
-    if domain not in domain_available_times.keys():
-        sitemap_urls = await CrawlerHelper.find_sitemap_links(current_url_parsed, robot_file_parser=robot_file_parser,
-                                                              wait_time=wait_time)
-    else:
+    # Get saved site from the database (if exists)
+    saved_site = await database_manager.get_site(domain=domain)
+
+    # get URLs
+    page_urls = CrawlerHelper.find_links(beautiful_soup, current_url_parsed, robot_file_parser=robot_file_parser)
+    site_id: int
+    if saved_site:
+        # Don't request sitemaps if the domain was already visited
         sitemap_urls = set()
         logger.debug(f'Domain {domain} was already visited so sitemaps will be ignored.')
+        site_id, domain, robots_content, sitemap_content = saved_site
+        CrawlerHelper.load_saved_robots(robots_content=robots_content,
+                                        robot_file_parser=robot_file_parser)
+    else:
+        logger.debug(f'Domain {domain} has not been visited yet.')
+        CrawlerHelper.load_robots_file_url(parsed_url=current_url_parsed,
+                                           robot_file_parser=robot_file_parser)
+        sitemap_urls = await CrawlerHelper.find_sitemap_links(
+            current_url=current_url_parsed,
+            robot_file_parser=robot_file_parser,
+            wait_time=wait_time)
+
+        site_id = await database_manager.save_site(domain=domain,
+                                                   sitemap_content=','.join(robot_file_parser.site_maps()),
+                                                   robots_content=robot_file_parser.__str__())
+
+    # Save page to the database
+    await database_manager.save_page(page_id=page_id, html=html, status=status, site_id=site_id)
 
     # combine DOM and sitemap URLs
     new_links = page_urls.union(sitemap_urls)
-
-    # Save page to the database
-    await database_manager.save_page(page_id=page_id, html=html, status=status, )
 
     # Add new urls to the frontier
     await database_manager.add_to_frontier(new_links)
 
     robot_delay = robot_file_parser.crawl_delay(USER_AGENT)
-    CrawlerHelper.save_site_available_time(domain_available_times=domain_available_times, domain=domain,
-                                           robot_delay=robot_delay, ip_available_times=ip_available_times, ip=ip)
+    CrawlerHelper.save_site_available_time(
+        domain_available_times=domain_available_times,
+        domain=domain,
+        robot_delay=robot_delay,
+        ip_available_times=ip_available_times,
+        ip=ip)
 
     logger.info(f'Crawling url {current_url} finished.')
 
@@ -137,7 +153,7 @@ async def start_crawler(database_manager: DatabaseManager):
                 except Exception as e:
                     logger.critical(f'Crawling url {url} failed with an error {e}.')
                     # TODO: save status code
-                    await database_manager.remove_from_frontier(page_id=frontier_id)
+                    await database_manager.mark_page_visited(page_id=frontier_id)
                 logger.info('###########################################################################')
                 logger.info(f'Visited {await database_manager.get_visited_pages_count()} unique links.')
                 logger.info(f'Frontier contains {len(frontier)} unique links.')

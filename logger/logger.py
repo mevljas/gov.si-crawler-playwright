@@ -124,6 +124,7 @@ class BraceFormatStyleFormatter(logging.Formatter):
         record.args = orig_args
         return formatted
 
+
 def init_logging():
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.INFO)
