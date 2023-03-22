@@ -69,7 +69,7 @@ async def main():
     await database_manager.create_models()
 
     # Get database session maker
-    async_session_maker = await database_manager.get_session_maker()
+    async_session_maker = database_manager.async_session_factory()
 
     await seed_default(async_session_maker)
 

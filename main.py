@@ -2,7 +2,7 @@ import asyncio
 import os
 
 from dotenv import load_dotenv
-from crawler import start_crawler
+from crawler import setup_threads
 from database.database_manager import DatabaseManager
 from logger.logger import logger
 
@@ -57,7 +57,7 @@ async def main():
     # !!! The sitemap has irregular sitemap URLs !!! 
     # await start_crawler(start_url='https://e-prostor.gov.si')
 
-    await start_crawler(database_manager=database_manager)
+    await setup_threads(database_manager=database_manager)
 
     # Clean database manager.
     await database_manager.cleanup()

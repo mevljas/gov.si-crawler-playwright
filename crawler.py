@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import urllib.robotparser
+from threading import Thread
 from urllib.parse import ParseResult
 from urllib.parse import urlparse
 from urllib.robotparser import RobotFileParser
@@ -8,7 +9,7 @@ from urllib.robotparser import RobotFileParser
 from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright, Page
 
-from crawler_helper.constants import USER_AGENT
+from crawler_helper.constants import USER_AGENT, default_domain_delay
 from crawler_helper.crawler_helper import CrawlerHelper
 from database.database_manager import DatabaseManager
 from logger.logger import logger
@@ -153,12 +154,13 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
 
     logger.info(f'Crawling url {current_url} finished.')
 
+def entrypoint(*params):
+    asyncio.run(run(*params))
 
-async def start_crawler(database_manager: DatabaseManager):
+async def run(database_manager: DatabaseManager):
     """
     Setups the playwright library and starts the crawler.
     """
-    logger.info(f'Starting the crawler.')
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(args=['--ignore-certificate-errors'])  # or "firefox" or "webkit".
         # create a new incognito browser context.
@@ -192,3 +194,15 @@ async def start_crawler(database_manager: DatabaseManager):
 
         await browser.close()
     logger.info(f'Crawler finished.')
+
+
+async def setup_threads(database_manager: DatabaseManager, n_threads: int = 5):
+    threads: [Thread] = []
+    for i in range(0, n_threads):
+        t = Thread(target=entrypoint, args=(database_manager,) , daemon=True, name=f'Thread {i}')
+        t.start()
+        threads.append(t)
+        await asyncio.sleep(default_domain_delay)
+
+    for t in threads:
+        t.join()
