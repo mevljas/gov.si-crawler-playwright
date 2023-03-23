@@ -30,7 +30,6 @@ async def seed_default(async_session_maker: async_sessionmaker[AsyncSession]):
     """
     logging.debug('Seeding the database started.')
     async with async_session_maker() as session:
-        async with session.begin():
             session.add_all(
                 [
                     DataType(code='PDF'),
@@ -69,9 +68,9 @@ async def main():
     await database_manager.create_models()
 
     # Get database session maker
-    async_session_maker = database_manager.async_session_factory()
+    asyncSessionMaker = database_manager.AsyncSessionMaker
 
-    await seed_default(async_session_maker)
+    await seed_default(asyncSessionMaker)
 
     # Clean database manager.
     await database_manager.cleanup()
