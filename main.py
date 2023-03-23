@@ -32,37 +32,7 @@ async def main():
                                            f"{postgres_db}")
 
     # Run the spider.
-
-    # *****
-    # TODO: The frontier strategy needs to follow the breadth-first strategy. In the report explain how is your strategy implemented.
-    # *****
-
-    # TODO: incorporate seed URLs
-    # TODO: implement multi-threading with database locking
-    # start crawling from each seed URL
-    # for seed_url in seed_urls:
-    #    crawl(seed_url)
-
-    # Test with robots.txt and large sitemap. 
-    # !!! It takes 1 HOUR to build whole URL tree !!!
-    # await start_crawler(start_url='https://www.gov.si')
-
-    # Test with redirect and no robots.txt, but with hidden sitemap.xml
-    # It takes 2 minutes to build whole URL tree
-    # await start_crawler(start_url='https://evem.gov.si')
-
-    # Test with robots.txt and sitemap url, but sitemap is 404 not found page
-    # await start_crawler(start_url='https://e-uprava.gov.si')
-
-    # Test with robots.txt and small sitemap. 
-    # It takes 20 seconds to build the URL tree
-    # !!! The sitemap has irregular sitemap URLs !!! 
-    # await start_crawler(start_url='https://e-prostor.gov.si')
-
-    await setup_threads(database_manager=database_manager)
-
-    # Clean database manager.
-    await database_manager.cleanup()
+    await setup_threads(database_manager=database_manager, n_threads=5)
 
     logger.info('Application finished.')
 

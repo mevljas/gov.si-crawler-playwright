@@ -16,6 +16,7 @@ from logger.logger import logger
 
 domain_available_times = {}  # A set with domains next available times.
 ip_available_times = {}  # A set with ip next available times.
+threads_status = {}  # Remember for each thread whether is sleeping (False) or running (True).
 
 
 async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: RobotFileParser,
@@ -159,7 +160,7 @@ def entrypoint(*params):
     asyncio.run(run(*params))
 
 
-async def run(database_manager: DatabaseManager):
+async def run(database_manager: DatabaseManager, thread_number: int):
     """
     Setups the playwright library and starts the crawler.
     """
@@ -173,9 +174,11 @@ async def run(database_manager: DatabaseManager):
         await browser_page.route("**/*", CrawlerHelper.block_aggressively)
         robot_file_parser = urllib.robotparser.RobotFileParser()
 
-        while True:  # TODO: While frontier is not empty
+        # TODO: maybe add an additional stop condition.
+        while any(threads_status.values()):
             frontier_page = await database_manager.pop_frontier()
             if frontier_page is not None:
+                threads_status[thread_number] = True
                 frontier_id, url = frontier_page
                 try:
                     await crawl_url(current_url=url,
@@ -187,26 +190,27 @@ async def run(database_manager: DatabaseManager):
                     logger.critical(f'Crawling url {url} failed with an error {e}.')
                     # TODO: save status code
                     await database_manager.mark_page_visited(page_id=frontier_id)
-                logger.info('###########################################################################')
-                logger.info(f'Visited {await database_manager.get_visited_pages_count()} unique links. '
-                            f'Frontier contains {len(await database_manager.get_frontier_links())} unique links.')
-
-                logger.info('###########################################################################')
+                logger.info('\n'
+                            '###################################################################################\n'
+                            f'Visited {await database_manager.get_visited_pages_count()} unique links.\n'
+                            f'Frontier contains {len(await database_manager.get_frontier_links())} unique links.\n'
+                            '###################################################################################')
             else:
+                threads_status[thread_number] = False
                 logger.info('Sleeping.')
                 await asyncio.sleep(30)
 
         await browser.close()
-    logger.info(f'Crawler finished.')
+    logger.info(f'Thread {thread_number} finished.')
 
 
 async def setup_threads(database_manager: DatabaseManager, n_threads: int = 5):
     threads: [Thread] = []
     for i in range(0, n_threads):
-        t = Thread(target=entrypoint, args=(database_manager,), daemon=True, name=f'Thread {i}')
+        threads_status[i] = True
+        t = Thread(target=entrypoint, args=(database_manager, i), daemon=True, name=f'Thread {i}')
         t.start()
         threads.append(t)
-        await asyncio.sleep(default_domain_delay)
 
     for t in threads:
         t.join()

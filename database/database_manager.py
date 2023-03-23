@@ -71,7 +71,7 @@ class DatabaseManager:
         """
         logger.debug('Getting the top of the frontier.')
         async with self.async_session_factory()() as session:
-            page: Page = (await session.execute(select(Page).where(Page.page_type_code == "FRONTIER").limit(1))).scalars().first()
+            page: Page = (await session.execute(select(Page).where(Page.page_type_code == "FRONTIER").limit(1).with_for_update())).scalars().first()
             logger.debug('Got the top of the frontier.')
             if page is not None:
                 page_id, page_url = page.id, page.url
