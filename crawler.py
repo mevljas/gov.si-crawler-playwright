@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import urllib.robotparser
+from threading import Thread
 from urllib.parse import ParseResult
 from urllib.parse import urlparse
 from urllib.robotparser import RobotFileParser
@@ -8,13 +9,15 @@ from urllib.robotparser import RobotFileParser
 from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright, Page
 
-from crawler_helper.constants import USER_AGENT
+from crawler_helper.constants import USER_AGENT, default_domain_delay
 from crawler_helper.crawler_helper import CrawlerHelper
 from database.database_manager import DatabaseManager
 from logger.logger import logger
 
+# TODO: implement locking for available times
 domain_available_times = {}  # A set with domains next available times.
 ip_available_times = {}  # A set with ip next available times.
+threads_status = {}  # Remember for each thread whether is sleeping (False) or running (True).
 
 
 async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: RobotFileParser,
@@ -125,7 +128,6 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
             robot_file_parser=robot_file_parser,
             wait_time=wait_time)
 
-        # TODO: Can we remove 'www' subdomain?
         site_id = await database_manager.save_site(domain=domain,
                                                    sitemap_content=','.join(robot_file_parser.site_maps()),
                                                    robots_content=robot_file_parser.__str__())
@@ -154,11 +156,14 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
     logger.info(f'Crawling url {current_url} finished.')
 
 
-async def start_crawler(database_manager: DatabaseManager):
+def entrypoint(*params):
+    asyncio.run(run(*params))
+
+
+async def run(database_manager: DatabaseManager, thread_number: int):
     """
     Setups the playwright library and starts the crawler.
     """
-    logger.info(f'Starting the crawler.')
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(args=['--ignore-certificate-errors'])  # or "firefox" or "webkit".
         # create a new incognito browser context.
@@ -169,11 +174,12 @@ async def start_crawler(database_manager: DatabaseManager):
         await browser_page.route("**/*", CrawlerHelper.block_aggressively)
         robot_file_parser = urllib.robotparser.RobotFileParser()
 
-        frontier = await database_manager.get_frontier()
-
-        while frontier:  # While frontier is not empty
-            for page in frontier:
-                frontier_id, url = page
+        # TODO: maybe add an additional stop condition.
+        while any(threads_status.values()):
+            frontier_page = await database_manager.pop_frontier()
+            if frontier_page is not None:
+                threads_status[thread_number] = True
+                frontier_id, url = frontier_page
                 try:
                     await crawl_url(current_url=url,
                                     browser_page=browser_page,
@@ -184,11 +190,24 @@ async def start_crawler(database_manager: DatabaseManager):
                     logger.critical(f'Crawling url {url} failed with an error {e}.')
                     # TODO: save status code
                     await database_manager.mark_page_visited(page_id=frontier_id)
-                logger.info('###########################################################################')
                 logger.info(f'Visited {await database_manager.get_visited_pages_count()} unique links.')
-                logger.info(f'Frontier contains {len(frontier)} unique links.')
-                logger.info('###########################################################################')
-                frontier = await database_manager.get_frontier()
+                logger.info(f'Frontier contains {len(await database_manager.get_frontier_links())} unique links.')
+            else:
+                threads_status[thread_number] = False
+                logger.info('Sleeping.')
+                await asyncio.sleep(30)
 
         await browser.close()
-    logger.info(f'Crawler finished.')
+    logger.info(f'Thread {thread_number} finished.')
+
+
+async def setup_threads(database_manager: DatabaseManager, n_threads: int = 5):
+    threads: [Thread] = []
+    for i in range(0, n_threads):
+        threads_status[i] = True
+        t = Thread(target=entrypoint, args=(database_manager, i), daemon=True, name=f'Spider {i}')
+        t.start()
+        threads.append(t)
+
+    for t in threads:
+        t.join()
