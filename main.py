@@ -26,8 +26,10 @@ async def main():
     postgres_user, postgres_password, postgres_db = load_env()
 
     # Setup database manager.
-    database_manager = DatabaseManager()
-    database_manager.create_database_engine(user=postgres_user, password=postgres_password, db=postgres_db)
+    database_manager = DatabaseManager(url=f"postgresql+asyncpg://"
+                                           f"{postgres_user}:"
+                                           f"{postgres_password}@localhost:5432/"
+                                           f"{postgres_db}")
 
     # Run the spider.
 

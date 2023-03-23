@@ -154,8 +154,10 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
 
     logger.info(f'Crawling url {current_url} finished.')
 
+
 def entrypoint(*params):
     asyncio.run(run(*params))
+
 
 async def run(database_manager: DatabaseManager):
     """
@@ -171,11 +173,10 @@ async def run(database_manager: DatabaseManager):
         await browser_page.route("**/*", CrawlerHelper.block_aggressively)
         robot_file_parser = urllib.robotparser.RobotFileParser()
 
-        frontier = await database_manager.get_frontier()
-
-        while frontier:  # While frontier is not empty
-            for page in frontier:
-                frontier_id, url = page
+        while True:  # TODO: While frontier is not empty
+            frontier_page = await database_manager.pop_frontier()
+            if frontier_page is not None:
+                frontier_id, url = frontier_page
                 try:
                     await crawl_url(current_url=url,
                                     browser_page=browser_page,
@@ -187,10 +188,13 @@ async def run(database_manager: DatabaseManager):
                     # TODO: save status code
                     await database_manager.mark_page_visited(page_id=frontier_id)
                 logger.info('###########################################################################')
-                logger.info(f'Visited {await database_manager.get_visited_pages_count()} unique links.')
-                logger.info(f'Frontier contains {len(frontier)} unique links.')
+                logger.info(f'Visited {await database_manager.get_visited_pages_count()} unique links. '
+                            f'Frontier contains {len(await database_manager.get_frontier_links())} unique links.')
+
                 logger.info('###########################################################################')
-                frontier = await database_manager.get_frontier()
+            else:
+                logger.info('Sleeping.')
+                await asyncio.sleep(30)
 
         await browser.close()
     logger.info(f'Crawler finished.')
@@ -199,7 +203,7 @@ async def run(database_manager: DatabaseManager):
 async def setup_threads(database_manager: DatabaseManager, n_threads: int = 5):
     threads: [Thread] = []
     for i in range(0, n_threads):
-        t = Thread(target=entrypoint, args=(database_manager,) , daemon=True, name=f'Thread {i}')
+        t = Thread(target=entrypoint, args=(database_manager,), daemon=True, name=f'Thread {i}')
         t.start()
         threads.append(t)
         await asyncio.sleep(default_domain_delay)
