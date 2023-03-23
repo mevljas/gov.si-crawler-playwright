@@ -14,6 +14,7 @@ from crawler_helper.crawler_helper import CrawlerHelper
 from database.database_manager import DatabaseManager
 from logger.logger import logger
 
+# TODO: implement locking for available times
 domain_available_times = {}  # A set with domains next available times.
 ip_available_times = {}  # A set with ip next available times.
 threads_status = {}  # Remember for each thread whether is sleeping (False) or running (True).
@@ -189,11 +190,8 @@ async def run(database_manager: DatabaseManager, thread_number: int):
                     logger.critical(f'Crawling url {url} failed with an error {e}.')
                     # TODO: save status code
                     await database_manager.mark_page_visited(page_id=frontier_id)
-                logger.info('\n'
-                            '###################################################################################\n'
-                            f'Visited {await database_manager.get_visited_pages_count()} unique links.\n'
-                            f'Frontier contains {len(await database_manager.get_frontier_links())} unique links.\n'
-                            '###################################################################################')
+                logger.info(f'Visited {await database_manager.get_visited_pages_count()} unique links.')
+                logger.info(f'Frontier contains {len(await database_manager.get_frontier_links())} unique links.')
             else:
                 threads_status[thread_number] = False
                 logger.info('Sleeping.')
