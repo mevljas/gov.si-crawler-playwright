@@ -138,10 +138,12 @@ class CrawlerHelper:
         if sitemaps is not None:
             for sitemap in sitemaps:
                 # parse/fetch found sitemaps and add their URLs
+                # TODO: wait time
                 new_urls_sitemap.update(await CrawlerHelper.get_sitemap_urls(CrawlerHelper, sitemap))
         else:
             # even though sitemap is not in robots.txt, try to find it in root
             sitemap = current_url.scheme + '://' + current_url.netloc + '/sitemap.xml'
+            # TODO: wait time
             new_urls_sitemap.update(await CrawlerHelper.get_sitemap_urls(CrawlerHelper, sitemap))
 
         # translate URLs to canonical form
@@ -163,8 +165,9 @@ class CrawlerHelper:
             return new_urls if new_urls != None else set()
 
         try:
-            xml = BeautifulSoup(sitemap.content, "xml")
-        except:
+            xml = BeautifulSoup(sitemap.content, features="xml")
+        except Exception as e:
+            logger.warning(f'Failed to parse sitemap with an error {e}.')
             return new_urls if new_urls != None else set()
 
         if new_urls is None:

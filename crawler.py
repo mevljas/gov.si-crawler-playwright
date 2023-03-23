@@ -127,7 +127,6 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
             robot_file_parser=robot_file_parser,
             wait_time=wait_time)
 
-        # TODO: Can we remove 'www' subdomain?
         site_id = await database_manager.save_site(domain=domain,
                                                    sitemap_content=','.join(robot_file_parser.site_maps()),
                                                    robots_content=robot_file_parser.__str__())
@@ -208,7 +207,7 @@ async def setup_threads(database_manager: DatabaseManager, n_threads: int = 5):
     threads: [Thread] = []
     for i in range(0, n_threads):
         threads_status[i] = True
-        t = Thread(target=entrypoint, args=(database_manager, i), daemon=True, name=f'Thread {i}')
+        t = Thread(target=entrypoint, args=(database_manager, i), daemon=True, name=f'Spider {i}')
         t.start()
         threads.append(t)
 
