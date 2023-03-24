@@ -4,26 +4,27 @@ import asyncio
 import os
 import socket
 from time import time
-from datetime import datetime, timezone
+from datetime import datetime
 from urllib.parse import ParseResult, urlparse
 from urllib.robotparser import RobotFileParser
 
 import requests
 from bs4 import BeautifulSoup
-from database.models import DataType, Image
+from database.models import DataType, Image, PageData
 from playwright.async_api import Page
 from url_normalize import url_normalize
 from w3lib.url import url_query_cleaner
 
 from crawler_helper.constants import navigation_assign_regex, navigation_func_regex, USER_AGENT, govsi_regex, \
-    full_url_regex, default_domain_delay, excluded_resource_types, image_extensions, binary_file_extensions
+    full_url_regex, default_domain_delay, excluded_resource_types, image_extensions, binary_file_extensions, \
+    binary_file_mime_dict
 from logger.logger import logger
 
 
 class CrawlerHelper:
 
     @staticmethod
-    async def get_page(url: str, page: Page) -> (str, str, int):
+    async def get_page(url: str, page: Page) -> (str, str, DataType, int):
         """
         Requests and downloads a specific webpage.
         :param url: Webpage url to be crawled.
@@ -32,10 +33,17 @@ class CrawlerHelper:
         """
         logger.debug(f'Opening page {url}.')
         response = await page.goto(url, timeout=10000)
-        html = await page.content()
         status = response.status
+
+        content_type = response.headers['content-type']
+        if content_type is not None and content_type in binary_file_mime_dict:
+            extension = binary_file_mime_dict[content_type]
+            dt: DataType = CrawlerHelper.extension_to_datatype(extension)
+            return url, '', dt, status
+
+        html = await page.content()
         logger.debug(f'Response status is {status}.')
-        return page.url, html, status
+        return page.url, html, None, status
 
     @staticmethod
     def find_links(beautiful_soup: BeautifulSoup, current_url: ParseResult, robot_file_parser: RobotFileParser) -> set[
@@ -60,7 +68,7 @@ class CrawlerHelper:
             if href is not None and CrawlerHelper.is_url(href):
                 url = href
             elif onclick is not None:
-                # check for format when directly assinging
+                # check for format when directly assigning
                 if navigation_assign_regex.match(onclick):
                     url = re.search(navigation_assign_regex, onclick).group(3)
                 # check for format when using function to assign
@@ -86,7 +94,7 @@ class CrawlerHelper:
         return new_urls
 
     @staticmethod
-    def find_images(beautiful_soup: BeautifulSoup, page_id: int) -> set[Image]:
+    def find_images(beautiful_soup: BeautifulSoup) -> set[Image]:
         """
         Get's verified HTML document and finds all images and returns them.
         :param beautiful_soup:  output of BeautifulSoup4 (i.e. validated and parsed HTML)
@@ -103,22 +111,14 @@ class CrawlerHelper:
             # Extract the path component of the URL
             path = urlparse(src).path
             # Split the path into filename and extension
-            name, ext = os.path.splitext(os.path.basename(path))
+            filename, extension = os.path.splitext(os.path.basename(path))
 
-            # Check if the URL is a data URI
-            # Example: src='data:image/png;base64,iVBORw0[...]uQmCC'
-            if src.startswith('data:image'):
-                filename = None
-                extension = src.split(';')[0].split('/')[-1]
             # Parse the URL and check if it has a valid file extension
-            elif ext.lower() in image_extensions:
-                filename = name
-                extension = ext[1:]  # remove the dot from the extension
-            else:
+            if extension.lower() not in image_extensions:
                 continue
 
             (mime, _) = guess_type(src)
-            image: Image = Image(filename=filename, content_type=mime, accessed_time=accessed_time, page_id=page_id)
+            image: Image = Image(filename=filename, content_type=mime, accessed_time=accessed_time)
             images.add(image)
         return images
 
@@ -149,12 +149,17 @@ class CrawlerHelper:
         # translate URLs to canonical form
         new_urls_sitemap = CrawlerHelper.canonicalize(new_urls_sitemap)
 
+        # check if the url is allowed to visit
+        new_urls_sitemap = {url for url in new_urls_sitemap if
+                            CrawlerHelper.is_url_allowed(url, robot_file_parser=robot_file_parser) and
+                            CrawlerHelper.is_domain_allowed(url=url)}
+
         return new_urls_sitemap
 
     @staticmethod
     async def get_sitemap_urls(self, sitemap_url, new_urls=None, wait_time: int = default_domain_delay) -> set[str]:
         """
-        From given root sitemap url, visting all .xml child routes and return leaf nodes as a new set of URLs
+        From given root sitemap url, visiting all .xml child routes and return leaf nodes as a new set of URLs
         This is a recursive function.
         """
         logger.debug(f'Sleeping for {wait_time}.')
@@ -215,7 +220,7 @@ class CrawlerHelper:
     @staticmethod
     def has_file_extension(url) -> bool:
         """
-        Checks if URL end with a file extenstion like: .html, .pdf, .txt, etc.
+        Checks if URL end with a file extension like: .html, .pdf, .txt, etc.
         """
         logger.debug(f'Checking whether url {url} points to file.')
         pattern = r'^.*\/[^\/]+\.[^\/]+$'
@@ -251,18 +256,23 @@ class CrawlerHelper:
             return False
 
     @staticmethod
-    def save_urls(urls: set[str], frontier: set[str]):
+    def extract_binary_links(urls: set) -> (set[str], set[PageData]):
         """
-        Save new URLs to frontier
+        Extracts all links from a set that point to binary files.
+        Returns the original set without binary links and a set of binary entries.
         """
-        logger.debug('Saving urls.')
-        url_list = list(urls)
-        for url in url_list:
-            # TODO: check if duplicate
-            # TODO: add to frontier
-            frontier.add(url)
-            logger.debug(f'Adding url {url} to frontier.')
-        logger.info(f'Saved {len(url_list)} urls.')
+        logger.debug(f'Extracting binary links from found page links.')
+        page_data_entries = set()
+        urls_to_remove = set()
+        for url in urls:
+            (binary, data_type) = CrawlerHelper.check_if_binary(url)
+            if binary:
+                urls_to_remove.add(url)
+                page_data: PageData = PageData(data_type_code=data_type)
+                page_data_entries.add(page_data)
+
+        urls.difference_update(urls_to_remove)
+        return (urls, page_data_entries)
 
     @staticmethod
     def check_if_binary(url: str) -> (bool, DataType):
@@ -271,12 +281,19 @@ class CrawlerHelper:
         """
         for ext in binary_file_extensions:
             if ext in url:
-                logger.debug(f'Url {url} points to binary file.')
-                dt: DataType = ext[1:].upper() # convert from file extension (.pdf) to enum (PDF)
+                logger.debug(f'Url {url} leads to binary file.')
+                dt: DataType = CrawlerHelper.extension_to_datatype(ext)
                 return (True, dt)
 
-        logger.debug(f'Url {url} does not point to a binary file.')
+        logger.debug(f'Url {url} does not lead to a binary file.')
         return (False, None)
+
+    @staticmethod
+    def extension_to_datatype(extension: str) -> DataType:
+        """
+        Converts file extension (.pdf) to DataType enum (PDF).
+        """
+        return extension[1:].upper()
 
     @staticmethod
     def fill_url(url: str, current_url_parsed: ParseResult) -> str:
@@ -311,11 +328,11 @@ class CrawlerHelper:
         """
         Checks whether the domain is on the allowed list.
         """
-        logger.debug(f'Checking wheter {url} is on the domain allowed list.')
+        logger.debug(f'Checking whether {url} is on the domain allowed list.')
         url_parsed = urlparse(url)
         allowed = govsi_regex.match(url_parsed.netloc)
         logger.debug(f'Url {url} domain allowed: {allowed}.')
-        return allowed
+        return bool(allowed)
 
     @staticmethod
     def fix_shortened_url(url: str) -> str:
@@ -328,15 +345,6 @@ class CrawlerHelper:
             return CrawlerHelper.get_real_url_from_shortlink(url=url)
         logger.debug('Url doesnt have to be cleaned.')
         return url
-
-    @staticmethod
-    def get_base_url(url: str) -> str:
-        """
-        Get base url. 
-        """
-        logger.debug(f'Converting {url} to base url.')
-        parsed_url: ParseResult = urlparse(url)
-        return parsed_url.scheme + '://' + parsed_url.netloc + '/'
 
     @staticmethod
     def load_robots_file_url(parsed_url: ParseResult, robot_file_parser: RobotFileParser) -> None:
@@ -415,10 +423,3 @@ class CrawlerHelper:
         except:
             logger.warning(f'Getting site ip address failed.')
             return None
-
-    @staticmethod
-    def get_iso_timestamp() -> datetime:
-        """
-        Returns current UTC timestamp in ISO format.
-        """
-        return datetime.now(timezone.utc)

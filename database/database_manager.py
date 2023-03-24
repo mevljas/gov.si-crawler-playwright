@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine, Asyn
     async_scoped_session
 from sqlalchemy.sql.functions import func
 
-from database.models import meta, Page, Site, Link, Image
+from database.models import PageData, meta, Page, Site, Link, Image
 from logger.logger import logger
 
 
@@ -104,18 +104,6 @@ class DatabaseManager:
 
             return result
 
-    async def mark_page_visited(self, page_id: int, page_type_code: str = 'HTML'):
-        """
-        Marks a page as visited.
-        """
-        logger.debug('Marking page as visited.')
-        async with self.async_session_factory()() as session:
-            # TODO: We should probably clear page_type_code instead of setting it to html?
-            await session.execute(update(Page).where(Page.id == page_id).values(page_type_code=page_type_code))
-            await session.commit()
-
-            logger.debug('Page marked as visited.')
-
     async def remove_from_frontier(self, page_id: int):
         """
         Removes a link from frontier.
@@ -143,7 +131,7 @@ class DatabaseManager:
 
             logger.debug('Added links to the frontier.')
 
-    async def save_page(self, page_id: int, status: str, site_id: int, html: str = None, html_hash: str = None,
+    async def save_page(self, page_id: int, status: int, site_id: int, html: str = None, html_hash: str = None,
                         page_type_code: str = 'HTML'):
         """
         Saved a visited page to the database.
@@ -160,6 +148,25 @@ class DatabaseManager:
             await session.commit()
 
             logger.debug('Page saved to the database.')
+
+    async def create_empty_page(self, url: str, site_id: int, page_type_code: str='HTML') -> int:
+        """
+        Creates an empty page with only the url and site_id, which is then filled in later. 
+        This is used for on-the-fly page saves, usually they would and should be created when adding to frontier.
+        Return the page's id.
+        """
+        logger.debug('Saving new page to the database.')
+        page_id: int
+        async with self.async_session_factory()() as session:
+            new_page: Page = Page(site_id=site_id, url=url, page_type_code=page_type_code)
+            session.add(new_page)
+            await session.flush()
+            page_id = new_page.id
+            await session.commit()
+
+            logger.debug(f'New page saved to the database with an id {page_id}.')
+            
+            return page_id
 
     async def save_site(self, domain: str, robots_content: str, sitemap_content) -> int:
         """
@@ -236,3 +243,25 @@ class DatabaseManager:
             await session.commit()
 
             logger.debug('Images saved to the database.')
+
+    async def save_page_data(self, page_data_entries: list[PageData]):
+        """
+        Saves new page data to the database.
+        """
+        logger.debug('Saving page data entries to the database.')
+        async with self.async_session_factory()() as session:
+                session.add_all(page_data_entries)
+                await session.commit()
+
+                logger.debug('Page data entries saved to the database.')
+
+    async def mark_page_as_failed(self, page_id: int):
+        """
+        Marks an attempted page as failed. Pages are marked as failed if there is any exception during page access.
+        """
+        logger.debug('Marking page as failed in the database.')
+        async with self.async_session_factory()() as session:
+            await session.execute(update(Page).where(Page.id == page_id).values(page_type_code="FAILED"))
+            await session.commit()
+
+            logger.debug('Page marked as failed.')

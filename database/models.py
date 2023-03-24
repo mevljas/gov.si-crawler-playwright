@@ -18,6 +18,7 @@ class DataType(Base):
 class PageType(Base):
     """
     Available values: HTML, BINARY, DUPLICATE, FRONTIER
+    Extra values: FAILED
     """
     __tablename__ = 'page_type'
 

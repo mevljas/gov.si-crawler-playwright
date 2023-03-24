@@ -12,6 +12,7 @@ from playwright.async_api import async_playwright, Page
 from crawler_helper.constants import USER_AGENT, default_domain_delay
 from crawler_helper.crawler_helper import CrawlerHelper
 from database.database_manager import DatabaseManager
+from database.models import PageData
 from logger.logger import logger
 
 # TODO: implement locking for available times
@@ -34,45 +35,43 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
     # Fix shortened URLs (if necessary).
     current_url = CrawlerHelper.fix_shortened_url(url=current_url)
 
-    # Check if URL leads to binary file
-    # TODO: save to page data table
-    (binary, data_type) = CrawlerHelper.check_if_binary(current_url)
-    if binary:
-        logger.info(f'Crawling url {current_url} finished, because url leads to binary file {data_type}.')
-        return
-
-    # fetch page
+    # Fetch page
     try:
-        (url, html, status) = await CrawlerHelper.get_page(url=current_url, page=browser_page)
+        (url, html, data_type, status) = await CrawlerHelper.get_page(url=current_url, page=browser_page)
     except Exception as e:
-        # TODO: maybe we should keep the page as visited instead of removing it and trying again?
-        await database_manager.remove_from_frontier(page_id=page_id)
+        # Mark page as failed and goto next page
+        await database_manager.mark_page_as_failed(page_id=page_id)
         logger.warning(f'Opening page {current_url} failed with an error {e}.')
         return
-    # Generate html hash
-    html_hash = hashlib.sha256(html.encode('utf-8')).hexdigest()
+    
+    if html:
+        # Generate html hash
+        html_hash = hashlib.sha256(html.encode('utf-8')).hexdigest()
 
-    # Check whether the html hash matches any other hash in the database.
-    page_collision = await database_manager.check_pages_hash_collision(html_hash=html_hash)
-    if page_collision is not None:
-        original_page_id, original_site_id = page_collision
-        await database_manager.save_page(page_id=page_id,
-                                         status=status,
-                                         site_id=original_site_id,
-                                         page_type_code='DUPLICATE'
-                                         )
-        await database_manager.add_page_link(original_page_id=original_page_id, duplicate_page_id=page_id)
-        logger.info(f'Url {current_url} is a duplicate of another page.')
-        return
+        # Check whether the html hash matches any other hash in the database.
+        page_collision = await database_manager.check_pages_hash_collision(html_hash=html_hash)
+        if page_collision is not None:
+            original_page_id, original_site_id = page_collision
+            await database_manager.save_page(page_id=page_id,
+                                            status=status,
+                                            site_id=original_site_id,
+                                            page_type_code='DUPLICATE')
+            await database_manager.add_page_link(original_page_id=original_page_id, duplicate_page_id=page_id)
+            logger.info(f'Url {current_url} is a duplicate of another page.')
+            return
+    else:
+        logger.debug(f'Page html is empty, this hopefully means that the page returned a binary file.')
 
-    # Convert actual page url to base/root url format
-    base_page_url = CrawlerHelper.get_base_url(url)
+    # Convert actual page url to canonical form
+    page_url = ''.join(CrawlerHelper.canonicalize(set([url])))
+    redirected = False
     # Check if URL is a redirect by matching current_url and returned url and the reassigning
     # Only checking HTTP response status for direct is most likely not enough since there could be a redirect with JS
-    if current_url != base_page_url:
-        current_url = base_page_url
-        logger.debug(
-            f'Current watched url {current_url} differs from actual browser url {base_page_url}. Redirect happened. Reassigning url.')
+    if current_url != page_url:
+        # Page saves happen later in the execution, the important thing is the set the proper context (i.e. the url) for all the following operations
+        logger.info(f'Current watched url {current_url} differs from actual browser url {page_url}. Redirect happened. Reassigning url.')
+        redirected = True
+        current_url = page_url
     else:
         logger.debug(f'Current watched url matches the actual browser url (i.e. no redirects happened).')
 
@@ -99,18 +98,9 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
     else:
         logger.debug(f'Waiting for accessing the domain {domain} is not required.')
 
-    # extract any relevant data from the page here, using BeautifulSoup
-    beautiful_soup = BeautifulSoup(html, "html.parser")
-
-    # get and save images
-    page_images = CrawlerHelper.find_images(beautiful_soup, page_id=page_id)
-    await database_manager.save_images(images=list(page_images))
-
     # Get saved site from the database (if exists)
     saved_site = await database_manager.get_site(domain=domain)
 
-    # get URLs
-    page_urls = CrawlerHelper.find_links(beautiful_soup, current_url_parsed, robot_file_parser=robot_file_parser)
     site_id: int
     if saved_site:
         # Don't request sitemaps if the domain was already visited
@@ -128,9 +118,45 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
             robot_file_parser=robot_file_parser,
             wait_time=wait_time)
 
+        sitemap_content = None
+        if robot_file_parser.site_maps() is not None:
+            sitemap_content = ','.join(robot_file_parser.site_maps())
         site_id = await database_manager.save_site(domain=domain,
-                                                   sitemap_content=','.join(robot_file_parser.site_maps()),
+                                                   sitemap_content=sitemap_content,
                                                    robots_content=robot_file_parser.__str__())
+
+    # PARSE PAGE
+    # extract any relevant data from the page here, using BeautifulSoup
+    beautiful_soup = BeautifulSoup(html, "html.parser")
+
+    # get images
+    page_images = CrawlerHelper.find_images(beautiful_soup)
+
+    # get URLs
+    page_urls = CrawlerHelper.find_links(beautiful_soup, current_url_parsed, robot_file_parser=robot_file_parser)
+
+    # check page URLs for binary file link and place them in separate list
+    (page_urls, page_data_entries) = CrawlerHelper.extract_binary_links(urls=page_urls)
+
+    # SAVE PAGE
+    # Check page content type for binary file
+    if data_type is not None:
+        # Save page as binary
+        await database_manager.save_page(site_id=site_id, page_id=page_id, status=status, page_type_code='BINARY')
+        # Save page data
+        await database_manager.save_page_data(page_data_entries=[PageData(page_id=page_id, data_type_code=data_type)])
+        logger.info(f'Crawling url {current_url} finished, because url leads to binary file {data_type}.')
+        return
+
+    # Check if page redirected
+    if redirected:
+        # Save original page as a redirect
+        # TODO: what to do with html content? Since we do not have the content before the redirect.
+        await database_manager.save_page(page_id=page_id,
+                                         status=301,
+                                         site_id=site_id)
+        # Create new page to act as the current one
+        page_id = await database_manager.create_empty_page(url=current_url, site_id=site_id)
 
     # Save page to the database
     await database_manager.save_page(page_id=page_id,
@@ -139,9 +165,21 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
                                      site_id=site_id,
                                      html_hash=html_hash)
 
+    # SAVE PAGE IMAGES
+    # images saved here because of potential page_id change
+    for image in page_images:
+        image.page_id = page_id
+    await database_manager.save_images(images=list(page_images))
+
+    # SAVE PAGE DATA
+    # page data saved here because of potential page_id change
+    for page_data in page_data_entries:
+        page_data.page_id = page_id
+    await database_manager.save_page_data(page_data_entries=list(page_data_entries))
+
+    # SAVE PAGE LINKS
     # combine DOM and sitemap URLs
     new_links = page_urls.union(sitemap_urls)
-
     # Add new urls to the frontier
     await database_manager.add_to_frontier(new_links)
 
@@ -165,7 +203,7 @@ async def run(database_manager: DatabaseManager, thread_number: int):
     Setups the playwright library and starts the crawler.
     """
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(args=['--ignore-certificate-errors'])  # or "firefox" or "webkit".
+        browser = await playwright.chromium.launch(headless=False, args=['--ignore-certificate-errors'])  # or "firefox" or "webkit".
         # create a new incognito browser context.
         context = await browser.new_context(ignore_https_errors=True, user_agent=USER_AGENT, )
         # create a new page in a pristine context.
@@ -189,7 +227,7 @@ async def run(database_manager: DatabaseManager, thread_number: int):
                 except Exception as e:
                     logger.critical(f'Crawling url {url} failed with an error {e}.')
                     # TODO: save status code
-                    await database_manager.mark_page_visited(page_id=frontier_id)
+                    await database_manager.mark_page_as_failed(page_id=frontier_id)
                 logger.info(f'Visited {await database_manager.get_visited_pages_count()} unique links.')
                 logger.info(f'Frontier contains {len(await database_manager.get_frontier_links())} unique links.')
             else:
