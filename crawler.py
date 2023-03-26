@@ -197,8 +197,10 @@ async def run(database_manager: DatabaseManager, thread_number: int):
     Setups the playwright library and starts the crawler.
     """
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=False,
-                                                   args=['--ignore-certificate-errors'])  # or "firefox" or "webkit".
+        browser = await playwright.chromium.launch(headless=False, # or "firefox" or "webkit".
+                                                   args=['--ignore-certificate-errors',
+                                                         '--ignore-certificate-errors-spki-lis'])
+
         # create a new incognito browser context.
         context = await browser.new_context(ignore_https_errors=True, user_agent=USER_AGENT, )
         # create a new page in a pristine context.

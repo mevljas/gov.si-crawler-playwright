@@ -38,7 +38,7 @@ class CrawlerHelper:
         :return: html, status
         """
         logger.debug(f'Opening page {url}.')
-        response = await page.goto(url, timeout=10000)
+        response = await page.goto(url, timeout=20000)
         status = response.status
 
         content_type = response.headers['content-type']
