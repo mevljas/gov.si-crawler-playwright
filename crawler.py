@@ -89,8 +89,8 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
     try:
         (url, html, data_type, status) = await CrawlerHelper.get_page(url=current_url, page=browser_page)
     except Exception as e:
-        # Mark page as failed and goto next page
-        await database_manager.mark_page_as_failed(page_id=page_id)
+        # Mark page as failed and go to the next page
+        await database_manager.mark_page_as_failed(page_id=page_id, site_id=site_id)
 
         match e:
             case 'net::ERR_BAD_SSL_CLIENT_AUTH_CERT':

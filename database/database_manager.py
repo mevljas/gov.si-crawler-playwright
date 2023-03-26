@@ -256,13 +256,13 @@ class DatabaseManager:
 
                 logger.debug('Page data entries saved to the database.')
 
-    async def mark_page_as_failed(self, page_id: int):
+    async def mark_page_as_failed(self, page_id: int, site_id: int):
         """
         Marks an attempted page as failed. Pages are marked as failed if there is any exception during page access.
         """
         logger.debug('Marking page as failed in the database.')
         async with self.async_session_factory()() as session:
-            await session.execute(update(Page).where(Page.id == page_id).values(page_type_code="FAILED"))
+            await session.execute(update(Page).where(Page.id == page_id).values(page_type_code="FAILED", site_id=site_id))
             await session.commit()
 
             logger.debug('Page marked as failed.')
