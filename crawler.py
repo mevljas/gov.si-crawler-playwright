@@ -66,11 +66,6 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
                                                  robot_file_parser=robot_file_parser,
                                                  domain=domain,
                                                  ip=ip)
-        sitemap_urls = await CrawlerHelper.find_sitemap_links(
-            current_url=current_url_parsed,
-            robot_file_parser=robot_file_parser,
-            domain=domain,
-            ip=ip)
 
         sitemap_content = None
         if robot_file_parser.site_maps() is not None:
@@ -79,10 +74,16 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
                                                    sitemap_content=sitemap_content,
                                                    robots_content=robot_file_parser.__str__())
 
+        sitemap_urls = await CrawlerHelper.find_sitemap_links(
+            current_url=current_url_parsed,
+            robot_file_parser=robot_file_parser,
+            domain=domain,
+            ip=ip)
+
     # Wait required delay time
     await CrawlerHelper.refresh_site_available_time(domain=domain,
-                                                        ip=ip,
-                                                        robot_delay=robot_file_parser.crawl_delay(useragent=USER_AGENT))
+                                                    ip=ip,
+                                                    robot_delay=robot_file_parser.crawl_delay(useragent=USER_AGENT))
 
     # Fetch page
     try:
@@ -102,9 +103,9 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
         if page_collision is not None:
             original_page_id, original_site_id = page_collision
             await database_manager.save_page(page_id=page_id,
-                                                 status=status,
-                                                 site_id=original_site_id,
-                                                 page_type_code='DUPLICATE')
+                                             status=status,
+                                             site_id=original_site_id,
+                                             page_type_code='DUPLICATE')
             await database_manager.add_page_link(original_page_id=original_page_id, duplicate_page_id=page_id)
             logger.info(f'Url {current_url} is a duplicate of another page.')
             return
