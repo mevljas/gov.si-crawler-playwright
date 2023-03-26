@@ -91,7 +91,19 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
     except Exception as e:
         # Mark page as failed and goto next page
         await database_manager.mark_page_as_failed(page_id=page_id)
-        logger.warning(f'Opening page {current_url} failed with an error {e}.')
+
+        match e:
+            case 'net::ERR_BAD_SSL_CLIENT_AUTH_CERT':
+                logger.debug(f'Opening page {current_url} failed with an error {e}.')
+            case 'net::ERR_CONNECTION_RESET':
+                logger.debug(f'Opening page {current_url} failed with an error {e}.')
+            case 'net::ERR_ABORTED':
+                # Tried to download files?
+                # TODO: Handle file downloads, because right now it just fails with an error net::ERR_ABORTED
+                logger.debug(f'Opening page {current_url} failed with an error {e}.')
+            case _:
+                logger.warning(f'Opening page {current_url} failed with an error {e}.')
+
         return
 
     if html:

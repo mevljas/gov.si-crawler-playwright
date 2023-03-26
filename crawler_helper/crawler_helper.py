@@ -180,11 +180,10 @@ class CrawlerHelper:
         logger.debug(f'Looking at sitemap {sitemap_url} for new urls.')
         # Wait required delay time
         await CrawlerHelper.refresh_site_available_time(domain=domain, ip=ip, robot_delay=robot_delay)
-        sitemap = requests.get(sitemap_url)
-        if sitemap.status_code != 200:
-            return new_urls if new_urls is not None else set()
-
         try:
+            sitemap = requests.get(sitemap_url)
+            if sitemap.status_code != 200:
+                return new_urls if new_urls is not None else set()
             xml = BeautifulSoup(sitemap.content, features="xml")
         except Exception as e:
             logger.warning(f'Failed to parse sitemap with an error {e}.')
@@ -436,6 +435,7 @@ class CrawlerHelper:
         # acquire the lock
         with CrawlerHelper.lock:
             wait_time = CrawlerHelper.get_site_wait_time(domain=domain, ip=ip)
+            wait_time = wait_time if wait_time > 0 else 0
             CrawlerHelper.save_site_available_time(domain=domain, ip=ip, robot_delay=robot_delay + wait_time)
         if wait_time > 0:
             logger.debug(f'Required waiting time for the domain {domain} and ip {ip} is {wait_time} seconds.')

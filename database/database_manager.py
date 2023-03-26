@@ -176,6 +176,7 @@ class DatabaseManager:
         logger.debug('Saving site to the database.')
         site_id: int
         async with self.async_session_factory()() as session:
+            # TODO: handle duplicates
             new_site: Site = Site(domain=domain, robots_content=robots_content, sitemap_content=sitemap_content)
             session.add(new_site)
             await session.flush()
