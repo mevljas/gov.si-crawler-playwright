@@ -140,12 +140,12 @@ def init_logging():
     console_handler.setFormatter(colored_formatter)
     root_logger.addHandler(console_handler)
 
-    # file_handler = logging.FileHandler("app.log")
-    # file_level = "DEBUG"
-    # file_handler.setLevel(file_level)
-    # file_format = "[%(asctime)s %(threadName)s, %(levelname)s] %(message)s"
-    # file_handler.setFormatter(BraceFormatStyleFormatter(file_format))
-    # root_logger.addHandler(file_handler)
+    file_handler = logging.FileHandler("app.log")
+    file_level = "DEBUG"
+    file_handler.setLevel(file_level)
+    file_format = "[%(asctime)s %(threadName)s, %(levelname)s] %(message)s"
+    file_handler.setFormatter(BraceFormatStyleFormatter(file_format))
+    root_logger.addHandler(file_handler)
     logging.basicConfig(level=level, format=console_format)
 
 

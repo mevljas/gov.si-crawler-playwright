@@ -1,5 +1,6 @@
+import mimetypes
 import threading
-from mimetypes import guess_type
+from mimetypes import guess_type, guess_extension
 import re
 import asyncio
 import os
@@ -30,26 +31,53 @@ class CrawlerHelper:
     lock = threading.Lock()
 
     @staticmethod
-    async def get_page(url: str, page: Page) -> (str, str, DataType, int):
+    async def get_page(url: str, page: Page, domain: str, ip: str, robot_delay: str) -> (str, str, DataType, int):
         """
         Requests and downloads a specific webpage.
         :param url: Webpage url to be crawled.
         :param page: Browser page.
         :return: html, status
         """
+        # Wait required delay time
+        await CrawlerHelper.refresh_site_available_time(domain=domain,
+                                                        ip=ip,
+                                                        robot_delay=robot_delay)
         logger.debug(f'Opening page {url}.')
-        response = await page.goto(url=url, timeout=page_timeout)
-        status = response.status
+        try:
+            response = await page.goto(url=url, timeout=page_timeout)
+            status = response.status
 
-        content_type = response.headers['content-type']
-        if content_type is not None and content_type in binary_file_mime_dict:
-            extension = binary_file_mime_dict[content_type]
-            dt: DataType = CrawlerHelper.extension_to_datatype(extension)
-            return url, '', dt, status
+            content_type = response.headers['content-type']
+            if content_type is not None and content_type in binary_file_mime_dict:
+                extension = binary_file_mime_dict[content_type]
+                dt: str = CrawlerHelper.extension_to_datatype(extension)
+                return url, '', dt, status
 
-        html = await page.content()
-        logger.debug(f'Response status is {status}.')
-        return page.url, html, None, status
+            html = await page.content()
+            logger.debug(f'Response status is {status}.')
+            return page.url, html, None, status
+        except Exception as e:
+            match str(e).split(' at ')[0]:
+                case 'net::ERR_ABORTED':
+                    # Maybe the file is of a binary type, try 2 download it.
+                    logger.debug(f'Going to the page failed, initiating download mode.')
+                    try:
+                        # Wait required delay time
+                        await CrawlerHelper.refresh_site_available_time(domain=domain, ip=ip, robot_delay=robot_delay)
+                        document = requests.get(url, verify=False, timeout=page_timeout)
+                        status = document.status_code
+                        if status != 200:
+                            raise Exception(f'Status code is {status}.')
+                        logger.debug(f'Download successful.')
+                        extension = guess_extension(document.headers.get('content-type', '').split(';')[0])
+                        data_type: str = CrawlerHelper.extension_to_datatype(extension)
+                        return page.url, None, data_type, status
+                    except Exception as e2:
+                        logger.warning(f'Failed to get document type with an error {e2}.')
+                case _:
+                    raise e
+
+
 
     @staticmethod
     def find_links(beautiful_soup: BeautifulSoup, current_url: ParseResult, robot_file_parser: RobotFileParser) \
@@ -186,7 +214,7 @@ class CrawlerHelper:
                 return new_urls if new_urls is not None else set()
             xml = BeautifulSoup(sitemap.content, features="xml")
         except Exception as e:
-            logger.warning(f'Failed to parse sitemap with an error {e}.')
+            logger.debug(f'Failed to parse sitemap with an error {e}.')
             return new_urls if new_urls is not None else set()
 
         if new_urls is None:
@@ -292,21 +320,21 @@ class CrawlerHelper:
         return urls, page_data_entries
 
     @staticmethod
-    def check_if_binary(url: str) -> (bool, DataType):
+    def check_if_binary(url: str) -> (bool, str):
         """
         Check if url leads to binary file
         """
         for ext in binary_file_extensions:
             if ext in url:
                 logger.debug(f'Url {url} leads to binary file.')
-                dt: DataType = CrawlerHelper.extension_to_datatype(ext)
+                dt: str = CrawlerHelper.extension_to_datatype(ext)
                 return True, dt
 
         logger.debug(f'Url {url} does not lead to a binary file.')
         return False, None
 
     @staticmethod
-    def extension_to_datatype(extension: str) -> DataType:
+    def extension_to_datatype(extension: str) -> str:
         """
         Converts file extension (.pdf) to DataType enum (PDF).
         """

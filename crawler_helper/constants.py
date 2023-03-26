@@ -37,7 +37,7 @@ excluded_resource_types = ["image", "font", "media"]
 
 image_extensions = ['.jpg', '.jpeg', '.jfif', '.pjpeg', '.pjp', '.png', '.apng', '.avif', '.gif', '.webp', '.svg',
                     '.eps', '.pdf', '.ico', '.cur', '.tif', '.tiff', '.bmp']
-binary_file_extensions = ['.pdf', '.doc', '.docx', '.ppt', '.pptx']
+binary_file_extensions = ['.pdf', '.doc', '.docx', '.ppt', '.pptx', '.zip']
 binary_file_mime_dict = {
     'application/pdf': '.pdf',
     'application/msword': '.doc',

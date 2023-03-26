@@ -149,23 +149,28 @@ class DatabaseManager:
 
             logger.debug('Page saved to the database.')
 
-    async def create_empty_page(self, url: str, site_id: int, page_type_code: str='HTML') -> int:
+    async def create_redirect_page(self, url: str, site_id: int, page_type_code: str= 'REDIRECT') -> int:
         """
         Creates an empty page with only the url and site_id, which is then filled in later. 
         This is used for on-the-fly page saves, usually they would and should be created when adding to frontier.
         Return the page's id.
         """
-        logger.debug('Saving new page to the database.')
+        logger.debug('Saving redirect page to the database.')
         page_id: int
         async with self.async_session_factory()() as session:
-            new_page: Page = Page(site_id=site_id, url=url, page_type_code=page_type_code)
-            session.add(new_page)
-            await session.flush()
-            page_id = new_page.id
-            await session.commit()
-
-            logger.debug(f'New page saved to the database with an id {page_id}.')
-            
+            try:
+                page: Page = Page(site_id=site_id, url=url, page_type_code=page_type_code)
+                session.add(page)
+                await session.flush()
+                page_id = page.id
+                await session.commit()
+                logger.debug(f'New page saved to the database.')
+            except exc.IntegrityError:
+                await session.rollback()
+                logger.debug('Adding page failed because it already exists in the database.')
+                page: Page = (await session.execute(
+                    select(Page).where(Page.url == url).limit(1))).scalars().first()
+                page_id = page.id
             return page_id
 
     async def save_site(self, domain: str, robots_content: str, sitemap_content) -> int:
@@ -251,18 +256,31 @@ class DatabaseManager:
         """
         logger.debug('Saving page data entries to the database.')
         async with self.async_session_factory()() as session:
-                session.add_all(page_data_entries)
-                await session.commit()
+            for page_data in page_data_entries:
+                try:
+                    session.add(page_data)
+                    await session.commit()
+                except exc.IntegrityError:
+                    await session.rollback()
+                    logger.debug('Adding some of the documents failed, probably because we dont support them.')
+                    page_data.data_type_code = 'UNKNOWN'
+                    session.add(page_data)
+                    await session.commit()
 
                 logger.debug('Page data entries saved to the database.')
 
-    async def mark_page_as_failed(self, page_id: int, site_id: int):
+    async def mark_page_as_failed(self, page_id: int, site_id: int = None):
         """
         Marks an attempted page as failed. Pages are marked as failed if there is any exception during page access.
         """
         logger.debug('Marking page as failed in the database.')
         async with self.async_session_factory()() as session:
-            await session.execute(update(Page).where(Page.id == page_id).values(page_type_code="FAILED", site_id=site_id))
+            if site_id is not None:
+                await session.execute(
+                    update(Page).where(Page.id == page_id).values(page_type_code="FAILED", site_id=site_id))
+            else:
+                await session.execute(
+                    update(Page).where(Page.id == page_id).values(page_type_code="FAILED"))
             await session.commit()
 
             logger.debug('Page marked as failed.')
