@@ -92,15 +92,15 @@ class DatabaseManager:
 
             return set([url for url in result.scalars()])
 
-    async def get_visited_pages_count(self) -> int:
+    async def get_html_pages_count(self) -> int:
         """
-        Gets all links from the frontier.
+        Gets all HTML pages from the database.
         """
-        logger.debug('Getting visited pages count.')
+        logger.debug('Getting visited html pages count.')
         async with self.async_session_factory()() as session:
             result: int = await session.scalar(
-                select(func.count()).select_from(Page).where(Page.page_type_code != "FRONTIER"))
-            logger.debug('Got visited pages count.')
+                select(func.count()).select_from(Page).where(Page.page_type_code == "HTML"))
+            logger.debug('Got visited html pages count.')
 
             return result
 

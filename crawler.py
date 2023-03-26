@@ -218,11 +218,8 @@ async def run(database_manager: DatabaseManager, thread_number: int):
                                                          "--allow-running-insecure-content",
                                                          "--ignore-certificate-errors-spki-lis"])
         # browser = await playwright.firefox.launch(headless=False,  # or "chromium" or "firefox" or "webkit".
-        #                                           firefox_user_prefs={"security.enterprise_roots.enabled": True,
-        #                                                               "acceptInsecureCerts": True,
-        #                                                               "security.ssl.enable_ocsp_stapling": False,
-        #                                                               "network.stricttransportsecurity.preloadlist": False
-        #                                                               })
+        # firefox_user_prefs={"security.enterprise_roots.enabled": True, "acceptInsecureCerts": True,
+        # "security.ssl.enable_ocsp_stapling": False, "network.stricttransportsecurity.preloadlist": False })
 
         # create a new incognito browser context.
         context = await browser.new_context(ignore_https_errors=True, user_agent=USER_AGENT, )
@@ -248,7 +245,7 @@ async def run(database_manager: DatabaseManager, thread_number: int):
                     logger.critical(f'Crawling url {url} failed with an error {e}.')
                     # TODO: save status code
                     await database_manager.mark_page_as_failed(page_id=frontier_id)
-                logger.info(f'Visited {await database_manager.get_visited_pages_count()} unique links.')
+                logger.info(f'Visited {await database_manager.get_html_pages_count()} unique HTML pages.')
                 logger.info(f'Frontier contains {len(await database_manager.get_frontier_links())} unique links.')
             else:
                 threads_status[thread_number] = False
