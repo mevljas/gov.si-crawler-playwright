@@ -46,13 +46,6 @@ class CrawlerHelper:
         try:
             response = await page.goto(url=url, timeout=page_timeout)
             status = response.status
-
-            content_type = response.headers['content-type']
-            if content_type is not None and content_type in binary_file_mime_dict:
-                extension = binary_file_mime_dict[content_type]
-                dt: str = CrawlerHelper.extension_to_datatype(extension)
-                return url, '', dt, status
-
             html = await page.content()
             logger.debug(f'Response status is {status}.')
             return page.url, html, None, status
