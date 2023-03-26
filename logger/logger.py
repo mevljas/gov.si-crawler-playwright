@@ -3,6 +3,8 @@ import logging.handlers
 import re
 import sys
 
+import urllib3
+
 
 class ColorCodes:
     grey = "\x1b[38;21m"
@@ -151,3 +153,4 @@ init_logging()
 logger = logging.getLogger(__name__)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 logging.getLogger("asyncio").setLevel(logging.WARNING)
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)

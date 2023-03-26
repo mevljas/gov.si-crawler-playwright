@@ -19,7 +19,7 @@ from w3lib.url import url_query_cleaner
 
 from crawler_helper.constants import navigation_assign_regex, navigation_func_regex, USER_AGENT, govsi_regex, \
     full_url_regex, default_domain_delay, excluded_resource_types, image_extensions, binary_file_extensions, \
-    binary_file_mime_dict
+    binary_file_mime_dict, page_timeout
 from logger.logger import logger
 
 
@@ -38,7 +38,7 @@ class CrawlerHelper:
         :return: html, status
         """
         logger.debug(f'Opening page {url}.')
-        response = await page.goto(url, timeout=20000)
+        response = await page.goto(url=url, timeout=page_timeout)
         status = response.status
 
         content_type = response.headers['content-type']
@@ -181,7 +181,7 @@ class CrawlerHelper:
         # Wait required delay time
         await CrawlerHelper.refresh_site_available_time(domain=domain, ip=ip, robot_delay=robot_delay)
         try:
-            sitemap = requests.get(sitemap_url)
+            sitemap = requests.get(sitemap_url, verify=False, timeout=page_timeout)
             if sitemap.status_code != 200:
                 return new_urls if new_urls is not None else set()
             xml = BeautifulSoup(sitemap.content, features="xml")
