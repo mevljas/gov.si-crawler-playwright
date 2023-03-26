@@ -1,22 +1,21 @@
 import asyncio
 import hashlib
-import threading
-import urllib.robotparser
-from threading import Thread
-from urllib.parse import ParseResult
-from urllib.parse import urlparse
+import urllib
+from urllib.parse import ParseResult, urlparse
 from urllib.robotparser import RobotFileParser
 
 from bs4 import BeautifulSoup
-from playwright.async_api import async_playwright, Page
+from playwright.async_api import async_playwright
 
-from crawler_helper.constants import USER_AGENT, default_domain_delay
-from crawler_helper.crawler_helper import CrawlerHelper
+from common.constants import USER_AGENT
+from common.globals import threads_status
 from database.database_manager import DatabaseManager
-from database.models import PageData
+from database.models import Page, PageData
 from logger.logger import logger
-
-threads_status = {}  # Remember for each thread whether is sleeping (False) or running (True).
+from services.link_extractor import find_links
+from services.page_extractor import find_sitemap_links, get_page, find_images, extract_binary_links
+from services.robots_extractor import load_saved_robots, load_robots_file_url
+from util.util import fix_shortened_url, get_site_ip, canonicalize, block_aggressively
 
 
 async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: RobotFileParser,
@@ -33,7 +32,7 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
     logger.info(f'Crawling url {current_url} started.')
 
     # Fix shortened URLs (if necessary).
-    current_url = CrawlerHelper.fix_shortened_url(url=current_url)
+    current_url = fix_shortened_url(url=current_url)
 
     # Parse url into a ParseResult object.
     current_url_parsed: ParseResult = urlparse(current_url)
@@ -42,7 +41,7 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
     domain = current_url_parsed.netloc
 
     # Get site's ip address
-    ip = CrawlerHelper.get_site_ip(hostname=domain)
+    ip = get_site_ip(hostname=domain)
 
     # If the DNS request failed it probably doesn't work.
     if ip is None:
@@ -58,14 +57,14 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
         sitemap_urls = set()
         logger.debug(f'Domain {domain} was already visited so sitemaps will be ignored.')
         site_id, domain, robots_content, sitemap_content = saved_site
-        CrawlerHelper.load_saved_robots(robots_content=robots_content,
-                                        robot_file_parser=robot_file_parser)
+        load_saved_robots(robots_content=robots_content,
+                          robot_file_parser=robot_file_parser)
     else:
         logger.debug(f'Domain {domain} has not been visited yet.')
-        await CrawlerHelper.load_robots_file_url(parsed_url=current_url_parsed,
-                                                 robot_file_parser=robot_file_parser,
-                                                 domain=domain,
-                                                 ip=ip)
+        await load_robots_file_url(parsed_url=current_url_parsed,
+                                   robot_file_parser=robot_file_parser,
+                                   domain=domain,
+                                   ip=ip)
 
         sitemap_content = None
         if robot_file_parser.site_maps() is not None:
@@ -74,7 +73,7 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
                                                    sitemap_content=sitemap_content,
                                                    robots_content=robot_file_parser.__str__())
 
-        sitemap_urls = await CrawlerHelper.find_sitemap_links(
+        sitemap_urls = await find_sitemap_links(
             current_url=current_url_parsed,
             robot_file_parser=robot_file_parser,
             domain=domain,
@@ -82,9 +81,9 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
 
     # Fetch page
     try:
-        (url, html, data_type, status) = await CrawlerHelper.get_page(url=current_url, page=browser_page, domain=domain,
-                                                                      ip=ip,
-                                                                      robot_delay=robot_file_parser.crawl_delay(useragent=USER_AGENT))
+        (url, html, data_type, status) = await get_page(url=current_url, page=browser_page, domain=domain,
+                                                        ip=ip,
+                                                        robot_delay=robot_file_parser.crawl_delay(useragent=USER_AGENT))
     except Exception as e:
         # Mark page as failed and go to the next page
         await database_manager.mark_page_as_failed(page_id=page_id, site_id=site_id)
@@ -96,13 +95,15 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
                 logger.debug(f'Opening page {current_url} failed with an error {e}.')
             case 'net::ERR_ABORTED':
                 logger.warning(f'Opening page {current_url} failed with an error {e}.')
+            case 'net::ERR_EMPTY_RESPONSE':
+                logger.debug(f'Opening page {current_url} failed with an error {e}.')
             case _:
                 logger.warning(f'Opening page {current_url} failed with an error {e}.')
 
         return
 
     # Convert actual page url to canonical form
-    page_url = ''.join(CrawlerHelper.canonicalize(set([url])))
+    page_url = ''.join(canonicalize({url}))
     redirected = False
     # Check if URL is a redirect by matching current_url and returned url and the reassigning
     # Only checking HTTP response status for direct is most likely not enough since there could be a redirect with JS
@@ -150,13 +151,13 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
         beautiful_soup = BeautifulSoup(html, "html.parser")
 
         # get images
-        page_images = CrawlerHelper.find_images(beautiful_soup)
+        page_images = find_images(beautiful_soup)
 
         # get URLs
-        page_urls = CrawlerHelper.find_links(beautiful_soup, current_url_parsed, robot_file_parser=robot_file_parser)
+        page_urls = find_links(beautiful_soup, current_url_parsed, robot_file_parser=robot_file_parser)
 
         # check page URLs for binary file link and place them in separate list
-        (page_urls, page_data_entries) = CrawlerHelper.extract_binary_links(urls=page_urls)
+        (page_urls, page_data_entries) = extract_binary_links(urls=page_urls)
 
         # SAVE PAGE
         # Save page to the database
@@ -202,11 +203,7 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
             return
 
 
-def entrypoint(*params):
-    asyncio.run(run(*params))
-
-
-async def run(database_manager: DatabaseManager, thread_number: int):
+async def start_spiders(database_manager: DatabaseManager, thread_number: int):
     """
     Setups the playwright library and starts the crawler.
     """
@@ -226,7 +223,7 @@ async def run(database_manager: DatabaseManager, thread_number: int):
         # create a new page in a pristine context.
         browser_page = await context.new_page()
         # Prevent loading some resources for better performance.
-        await browser_page.route("**/*", CrawlerHelper.block_aggressively)
+        await browser_page.route("**/*", block_aggressively)
         robot_file_parser = urllib.robotparser.RobotFileParser()
 
         # TODO: maybe add an additional stop condition.
@@ -254,15 +251,3 @@ async def run(database_manager: DatabaseManager, thread_number: int):
 
         await browser.close()
     logger.info(f'Thread {thread_number} finished.')
-
-
-async def setup_threads(database_manager: DatabaseManager, n_threads: int = 5):
-    threads: [Thread] = []
-    for i in range(0, n_threads):
-        threads_status[i] = True
-        t = Thread(target=entrypoint, args=(database_manager, i), daemon=True, name=f'Spider {i}')
-        t.start()
-        threads.append(t)
-
-    for t in threads:
-        t.join()

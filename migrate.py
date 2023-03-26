@@ -1,15 +1,13 @@
 import asyncio
+import logging
 import os
-import sys
 
 from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
 from database.database_manager import DatabaseManager
-from database.models import meta, DataType, PageType, Site, Page
-import logging
-
-from logger.logger import ColorizedArgsFormatter, BraceFormatStyleFormatter, logger
+from database.models import DataType, PageType, Page
+from logger.logger import logger
 
 
 def load_env() -> (str, str, str):
@@ -37,15 +35,15 @@ async def seed_default(async_session_factory: async_sessionmaker[AsyncSession]):
                 DataType(code='DOCX'),
                 DataType(code='PPT'),
                 DataType(code='PPTX'),
-                DataType(code='ZIP'), # extra
-                DataType(code='UNKNOWN'), # extra
+                DataType(code='ZIP'),
+                DataType(code='UNKNOWN'),
                 PageType(code='HTML'),
                 PageType(code='BINARY'),
                 PageType(code='DUPLICATE'),
                 PageType(code='FRONTIER'),
-                PageType(code='FAILED'), # extra
-                PageType(code='CRAWLING'), # extra
-                PageType(code='REDIRECT'), # extra
+                PageType(code='FAILED'),
+                PageType(code='CRAWLING'),
+                PageType(code='REDIRECT'),
                 Page(url='https://gov.si', page_type_code='FRONTIER'),
                 Page(url='https://evem.gov.si', page_type_code='FRONTIER'),
                 Page(url='https://e-uprava.gov.si', page_type_code='FRONTIER'),

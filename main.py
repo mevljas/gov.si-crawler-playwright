@@ -2,7 +2,7 @@ import asyncio
 import os
 
 from dotenv import load_dotenv
-from crawler import setup_threads
+from spider.setup import setup_threads
 from database.database_manager import DatabaseManager
 from logger.logger import logger
 

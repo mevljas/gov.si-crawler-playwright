@@ -71,7 +71,8 @@ class DatabaseManager:
         """
         logger.debug('Getting the top of the frontier.')
         async with self.async_session_factory()() as session:
-            page: Page = (await session.execute(select(Page).where(Page.page_type_code == "FRONTIER").limit(1).with_for_update())).scalars().first()
+            page: Page = (await session.execute(
+                select(Page).where(Page.page_type_code == "FRONTIER").limit(1).with_for_update())).scalars().first()
             logger.debug('Got the top of the frontier.')
             if page is not None:
                 page_id, page_url = page.id, page.url
@@ -79,7 +80,6 @@ class DatabaseManager:
                 await session.commit()
                 return page_id, page_url
             logger.debug('Frontier is empty')
-            return
 
     async def get_frontier_links(self) -> set[str]:
         """
@@ -149,7 +149,7 @@ class DatabaseManager:
 
             logger.debug('Page saved to the database.')
 
-    async def create_redirect_page(self, url: str, site_id: int, page_type_code: str= 'REDIRECT') -> int:
+    async def create_redirect_page(self, url: str, site_id: int, page_type_code: str = 'REDIRECT') -> int:
         """
         Creates an empty page with only the url and site_id, which is then filled in later. 
         This is used for on-the-fly page saves, usually they would and should be created when adding to frontier.

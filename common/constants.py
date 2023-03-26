@@ -30,7 +30,7 @@ The URL is stored in group 4
 navigation_func_regex = re.compile(".*(.)?location(.href)?.(.*)\([\"\'](.*)[\"\']\)")
 
 USER_AGENT = "fri-wier-besela"
-default_domain_delay = 5  # seconds
+DEFAULT_DOMAIN_DELAY = 5  # seconds
 
 # Resource types that will be blocked.
 excluded_resource_types = ["image", "font", "media"]
@@ -45,5 +45,5 @@ binary_file_mime_dict = {
     'application/vnd.ms-powerpoint': '.ppt',
     'application/vnd.openxmlformats-officedocument.presentationml.presentation': '.pptx',
 }
-# Page timeout in seconds
-page_timeout = 20000
+# Page timeout in milliseconds
+PAGE_WAIT_TIMEOUT = 20000
