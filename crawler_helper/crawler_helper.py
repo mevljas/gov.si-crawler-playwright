@@ -1,3 +1,4 @@
+import threading
 from mimetypes import guess_type
 import re
 import asyncio
@@ -10,6 +11,7 @@ from urllib.robotparser import RobotFileParser
 
 import requests
 from bs4 import BeautifulSoup
+
 from database.models import DataType, Image, PageData
 from playwright.async_api import Page
 from url_normalize import url_normalize
@@ -22,6 +24,10 @@ from logger.logger import logger
 
 
 class CrawlerHelper:
+    domain_available_times = {}  # A set with domains next available times.
+    ip_available_times = {}  # A set with ip next available times.
+    # create a shared lock
+    lock = threading.Lock()
 
     @staticmethod
     async def get_page(url: str, page: Page) -> (str, str, DataType, int):
@@ -46,8 +52,8 @@ class CrawlerHelper:
         return page.url, html, None, status
 
     @staticmethod
-    def find_links(beautiful_soup: BeautifulSoup, current_url: ParseResult, robot_file_parser: RobotFileParser) -> set[
-        str]:
+    def find_links(beautiful_soup: BeautifulSoup, current_url: ParseResult, robot_file_parser: RobotFileParser) \
+            -> set[str]:
         """
         Get's verified HTML document and finds all valid new URL holder elements, parses those URLs and returns them.
         :param robot_file_parser: parser for robots.txt
@@ -78,7 +84,8 @@ class CrawlerHelper:
                 continue
 
             # continue if no valid url was found
-            if url is None: continue
+            if url is None:
+                continue
 
             # handle relative path URLs and fix them
             url = CrawlerHelper.fill_url(url, current_url)
@@ -123,8 +130,9 @@ class CrawlerHelper:
         return images
 
     @staticmethod
-    async def find_sitemap_links(current_url: ParseResult, robot_file_parser: RobotFileParser, wait_time: int) -> set[
-        str]:
+    async def find_sitemap_links(current_url: ParseResult, robot_file_parser: RobotFileParser,
+                                 domain: str,
+                                 ip: str, ) -> set[str]:
         """
         Checks for sitemap.xml file and recursively traverses the tree to find all URLs.
         :param robot_file_parser: parser for robots.txt
@@ -136,15 +144,22 @@ class CrawlerHelper:
         sitemaps = robot_file_parser.site_maps()
         new_urls_sitemap = set()
         if sitemaps is not None:
+            logger.debug(f'Found {len(sitemaps)} sitemaps.')
             for sitemap in sitemaps:
                 # parse/fetch found sitemaps and add their URLs
-                # TODO: wait time
-                new_urls_sitemap.update(await CrawlerHelper.get_sitemap_urls(CrawlerHelper, sitemap))
+                new_urls_sitemap.update(await CrawlerHelper.get_sitemap_urls(CrawlerHelper, sitemap_url=sitemap,
+                                                                             domain=domain,
+                                                                             ip=ip,
+                                                                             robot_delay=robot_file_parser.crawl_delay(
+                                                                                 useragent=USER_AGENT)))
         else:
             # even though sitemap is not in robots.txt, try to find it in root
             sitemap = current_url.scheme + '://' + current_url.netloc + '/sitemap.xml'
-            # TODO: wait time
-            new_urls_sitemap.update(await CrawlerHelper.get_sitemap_urls(CrawlerHelper, sitemap))
+            new_urls_sitemap.update(await CrawlerHelper.get_sitemap_urls(CrawlerHelper, sitemap_url=sitemap,
+                                                                         domain=domain,
+                                                                         ip=ip,
+                                                                         robot_delay=robot_file_parser.crawl_delay(
+                                                                             useragent=USER_AGENT)))
 
         # translate URLs to canonical form
         new_urls_sitemap = CrawlerHelper.canonicalize(new_urls_sitemap)
@@ -157,23 +172,23 @@ class CrawlerHelper:
         return new_urls_sitemap
 
     @staticmethod
-    async def get_sitemap_urls(self, sitemap_url, new_urls=None, wait_time: int = default_domain_delay) -> set[str]:
+    async def get_sitemap_urls(self, sitemap_url, domain: str, ip: str, robot_delay: str, new_urls=None) -> set[str]:
         """
         From given root sitemap url, visiting all .xml child routes and return leaf nodes as a new set of URLs
         This is a recursive function.
         """
-        logger.debug(f'Sleeping for {wait_time}.')
-        await asyncio.sleep(wait_time)
         logger.debug(f'Looking at sitemap {sitemap_url} for new urls.')
+        # Wait required delay time
+        await CrawlerHelper.refresh_site_available_time(domain=domain, ip=ip, robot_delay=robot_delay)
         sitemap = requests.get(sitemap_url)
         if sitemap.status_code != 200:
-            return new_urls if new_urls != None else set()
+            return new_urls if new_urls is not None else set()
 
         try:
             xml = BeautifulSoup(sitemap.content, features="xml")
         except Exception as e:
             logger.warning(f'Failed to parse sitemap with an error {e}.')
-            return new_urls if new_urls != None else set()
+            return new_urls if new_urls is not None else set()
 
         if new_urls is None:
             new_urls = set()
@@ -182,20 +197,23 @@ class CrawlerHelper:
             url = loc.get_text()
 
             if url.endswith('.xml') or 'sitemap.xml' in url:
-                new_urls.update(await self.get_sitemap_urls(self, url, new_urls))
+                new_urls.update(await self.get_sitemap_urls(self, sitemap_url=url,
+                                                            domain=domain,
+                                                            ip=ip,
+                                                            robot_delay=robot_delay))
             else:
                 new_urls.add(url)
 
         return new_urls
 
-    @staticmethod
-    def delay() -> None:
-        """
-        Wait web crawler delay. Not to be used for playwright!
-        """
-        logger.debug(f'Delay for {CrawlerHelper.domain_delay} seconds')
-        time.sleep(CrawlerHelper.domain_delay)
-        return None
+    # @staticmethod
+    # def delay() -> None:
+    #     """
+    #     Wait web crawler delay. Not to be used for playwright!
+    #     """
+    #     logger.debug(f'Delay for {CrawlerHelper.domain_delay} seconds')
+    #     time.sleep(CrawlerHelper.domain_delay)
+    #     return None
 
     @staticmethod
     def canonicalize(urls: set) -> set[str]:
@@ -272,7 +290,7 @@ class CrawlerHelper:
                 page_data_entries.add(page_data)
 
         urls.difference_update(urls_to_remove)
-        return (urls, page_data_entries)
+        return urls, page_data_entries
 
     @staticmethod
     def check_if_binary(url: str) -> (bool, DataType):
@@ -283,10 +301,10 @@ class CrawlerHelper:
             if ext in url:
                 logger.debug(f'Url {url} leads to binary file.')
                 dt: DataType = CrawlerHelper.extension_to_datatype(ext)
-                return (True, dt)
+                return True, dt
 
         logger.debug(f'Url {url} does not lead to a binary file.')
-        return (False, None)
+        return False, None
 
     @staticmethod
     def extension_to_datatype(extension: str) -> DataType:
@@ -347,7 +365,8 @@ class CrawlerHelper:
         return url
 
     @staticmethod
-    def load_robots_file_url(parsed_url: ParseResult, robot_file_parser: RobotFileParser) -> None:
+    async def load_robots_file_url(parsed_url: ParseResult, robot_file_parser: RobotFileParser, domain: str,
+                                   ip: str) -> None:
         """
         Finds and parser site's robots.txt file from an url.
         """
@@ -355,6 +374,8 @@ class CrawlerHelper:
         logger.debug(f'Getting robots.txt with url {robots_url}.')
         try:
             robot_file_parser.set_url(robots_url)
+            # Wait required delay time
+            await CrawlerHelper.refresh_site_available_time(domain=domain, ip=ip)
             robot_file_parser.read()
         except:
             logger.debug(f'Getting robots.txt with url {robots_url} failed.')
@@ -374,34 +395,53 @@ class CrawlerHelper:
 
     @staticmethod
     def save_site_available_time(
-            domain_available_times: dict,
-            ip_available_times: dict,
-            robot_delay: str,
+            robot_delay: int,
             domain: str,
             ip: str):
         """
         Save the time in seconds when the domain and ip will be available for crawling again.
         """
-        delay = int(robot_delay) if robot_delay is not None else default_domain_delay
-        logger.debug(f'Saving delay {delay} seconds for the domain {domain} and ip {ip}.')
-        domain_available_times[domain] = time() + delay
+        logger.debug(f'Saving delay {robot_delay} seconds for the domain {domain} and ip {ip}.')
+        # read or write the shared variable
+        CrawlerHelper.domain_available_times[domain] = time() + robot_delay
         if ip is not None:
-            ip_available_times[ip] = time() + delay
+            CrawlerHelper.ip_available_times[ip] = time() + robot_delay
 
     @staticmethod
-    def get_site_wait_time(domain_available_times: dict, ip_available_times: dict, domain: str, ip: str):
+    def get_site_wait_time(domain: str, ip: str):
         """
-        Get the wait time in seconds for the domain an ip to be available for crawling again.
+        Get the wait time in seconds for the domain and ip to be available for crawling again.
         """
         current_time = time()
-        domain_delay = (domain_available_times.get(domain) or current_time) - current_time
+        # read or write the shared variable
+        domain_delay = (CrawlerHelper.domain_available_times.get(domain) or current_time) - current_time
         if ip is not None:
-            ip_delay = (ip_available_times.get(ip) or current_time) - current_time
+            ip_delay = (CrawlerHelper.ip_available_times.get(ip) or current_time) - current_time
         else:
             ip_delay = -1
         max_delay = max(domain_delay, ip_delay)
         logger.debug(f'Required delay for the domain {domain} and ip {ip} is {max_delay} seconds.')
         return max_delay
+
+    @staticmethod
+    async def refresh_site_available_time(
+            domain: str,
+            ip: str,
+            robot_delay: str = None):
+        """
+        Waits the required delay time and refreshes
+        the wait time in seconds for the domain and ip to be available for crawling again.
+        """
+        robot_delay = int(robot_delay) if robot_delay is not None else default_domain_delay
+        # acquire the lock
+        with CrawlerHelper.lock:
+            wait_time = CrawlerHelper.get_site_wait_time(domain=domain, ip=ip)
+            CrawlerHelper.save_site_available_time(domain=domain, ip=ip, robot_delay=robot_delay + wait_time)
+        if wait_time > 0:
+            logger.debug(f'Required waiting time for the domain {domain} and ip {ip} is {wait_time} seconds.')
+            await asyncio.sleep(wait_time)
+        else:
+            logger.debug(f'Waiting for accessing the domain {domain} and ip {ip} is not required.')
 
     @staticmethod
     async def block_aggressively(route):

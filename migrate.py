@@ -42,6 +42,7 @@ async def seed_default(async_session_factory: async_sessionmaker[AsyncSession]):
                 PageType(code='DUPLICATE'),
                 PageType(code='FRONTIER'),
                 PageType(code='FAILED'), # extra
+                PageType(code='CRAWLING'), # extra
                 Page(url='https://gov.si', page_type_code='FRONTIER'),
                 Page(url='https://evem.gov.si', page_type_code='FRONTIER'),
                 Page(url='https://e-uprava.gov.si', page_type_code='FRONTIER'),

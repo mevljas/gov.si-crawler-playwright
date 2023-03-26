@@ -128,22 +128,20 @@ class BraceFormatStyleFormatter(logging.Formatter):
 def init_logging():
     level = logging.DEBUG
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.INFO)
+    root_logger.setLevel(level)
 
-    console_level = "DEBUG"
+    console_level = "INFO"
     console_handler = logging.StreamHandler(stream=sys.stdout)
     console_handler.setLevel(console_level)
-    # console_format = "%(asctime)s - %(levelname)-8s - %(name)-25s - %(message)s"
     console_format = "[%(asctime)s %(threadName)s %(levelname)s] %(message)s"
     colored_formatter = ColorizedArgsFormatter(console_format)
     console_handler.setFormatter(colored_formatter)
     root_logger.addHandler(console_handler)
 
     # file_handler = logging.FileHandler("app.log")
-    # file_level = "WARNING"
+    # file_level = "DEBUG"
     # file_handler.setLevel(file_level)
-    # file_format = "%(asctime)s - %(name)s (%(lineno)s) - %(levelname)-8s - %(threadName)-12s - %(message)s"
-    # logFormatStr = "[%(asctime)s %(threadName)s, %(levelname)s] %(message)s"
+    # file_format = "[%(asctime)s %(threadName)s, %(levelname)s] %(message)s"
     # file_handler.setFormatter(BraceFormatStyleFormatter(file_format))
     # root_logger.addHandler(file_handler)
     logging.basicConfig(level=level, format=console_format)

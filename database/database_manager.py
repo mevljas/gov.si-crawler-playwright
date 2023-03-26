@@ -75,7 +75,7 @@ class DatabaseManager:
             logger.debug('Got the top of the frontier.')
             if page is not None:
                 page_id, page_url = page.id, page.url
-                await session.execute(update(Page).where(Page.id == page.id).values(page_type_code=None))
+                await session.execute(update(Page).where(Page.id == page.id).values(page_type_code='CRAWLING'))
                 await session.commit()
                 return page_id, page_url
             logger.debug('Frontier is empty')
