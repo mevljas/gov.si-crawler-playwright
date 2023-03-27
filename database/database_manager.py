@@ -223,6 +223,8 @@ class DatabaseManager:
         """
         Gets the site from the database.
         """
+        # Remove www.
+        domain = domain.replace('www.', '')
         logger.debug('Getting the site from the database.')
         async with self.async_session_factory()() as session:
             result: Result = await session.execute(select(Site).where(Site.domain == domain))
