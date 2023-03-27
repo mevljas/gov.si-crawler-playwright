@@ -128,9 +128,6 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
     else:
         logger.debug(f'Current watched url matches the actual browser url (i.e. no redirects happened).')
 
-
-
-
     if html:
         # Generate html hash
         html_hash = hashlib.sha256(html.encode('utf-8')).hexdigest()
@@ -209,15 +206,15 @@ async def start_spiders(database_manager: DatabaseManager, thread_number: int):
     Setups the playwright library and starts the crawler.
     """
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=False,  # or "chromium" or "firefox" or "webkit".
-                                                   args=["--ignore-certificate-errors",
+        browser = await playwright.chromium.launch(args=["--ignore-certificate-errors",
                                                          "--ignore-urlfetcher-cert-requests",
                                                          "--ignore-certificate-errors",
                                                          "--allow-running-insecure-content",
                                                          "--ignore-certificate-errors-spki-lis"])
-        # browser = await playwright.firefox.launch(headless=False,  # or "chromium" or "firefox" or "webkit".
-        # firefox_user_prefs={"security.enterprise_roots.enabled": True, "acceptInsecureCerts": True,
-        # "security.ssl.enable_ocsp_stapling": False, "network.stricttransportsecurity.preloadlist": False })
+
+        # browser = await playwright.firefox.launch(firefox_user_prefs={"security.enterprise_roots.enabled": True,
+        # "acceptInsecureCerts": True, "security.ssl.enable_ocsp_stapling": False,
+        # "network.stricttransportsecurity.preloadlist": False})
 
         # create a new incognito browser context.
         context = await browser.new_context(ignore_https_errors=True, user_agent=USER_AGENT, )
