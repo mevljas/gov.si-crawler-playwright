@@ -59,7 +59,7 @@ async def get_page(url: str, page: Page, domain: str, ip: str, robot_delay: str)
 
 def find_images(beautiful_soup: BeautifulSoup) -> set[Image]:
     """
-    Get's verified HTML document and finds all images and returns them.
+    Gets verified HTML document and finds all images and returns them.
     :param beautiful_soup:  output of BeautifulSoup4 (i.e. validated and parsed HTML)
     """
     logger.debug(f'Finding images on the page.')

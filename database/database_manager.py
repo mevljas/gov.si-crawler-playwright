@@ -195,21 +195,28 @@ class DatabaseManager:
 
     async def save_site(self, domain: str, robots_content: str, sitemap_content) -> int:
         """
-        Saved a visited site to the database.
-        Return a site's id.
+        Saves a visited site to the database.
+        Returns a site's id.
         """
         logger.debug('Saving site to the database.')
         site_id: int
+
+        # Remove www.
+        domain = domain.replace('www.', '')
         async with self.async_session_factory()() as session:
-            # TODO: handle duplicates
-            new_site: Site = Site(domain=domain, robots_content=robots_content, sitemap_content=sitemap_content)
-            session.add(new_site)
-            await session.flush()
-            site_id = new_site.id
-            await session.commit()
-
-            logger.debug(f'Site saved to the database with an id {site_id}.')
-
+            try:
+                site: Site = Site(domain=domain, robots_content=robots_content, sitemap_content=sitemap_content)
+                session.add(site)
+                await session.flush()
+                site_id = site.id
+                await session.commit()
+                logger.debug(f'Site saved to the database with an id {site_id}.')
+            except exc.IntegrityError:
+                await session.rollback()
+                logger.debug('Adding site failed because it already exists in the database.')
+                site: Site = (await session.execute(
+                    select(Site).where(Site.domain == domain).limit(1))).scalars().first()
+                site_id = site.id
             return site_id
 
     async def get_site(self, domain: str) -> (int, str, str, str):
