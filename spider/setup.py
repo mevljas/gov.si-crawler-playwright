@@ -17,6 +17,8 @@ async def setup_threads(database_manager: DatabaseManager, n_threads: int = 5):
         t = Thread(target=entrypoint, args=(database_manager, i), daemon=True, name=f'Spider {i}')
         t.start()
         threads.append(t)
+        # Don't start all threads at once so the site table get filled first.
+        await asyncio.sleep(10)
 
     for t in threads:
         t.join()

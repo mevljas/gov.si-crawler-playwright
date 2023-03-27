@@ -205,6 +205,7 @@ async def start_spiders(database_manager: DatabaseManager, thread_number: int):
     """
     Setups the playwright library and starts the crawler.
     """
+    logger.info('Spider started.')
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(args=["--ignore-certificate-errors",
                                                          "--ignore-urlfetcher-cert-requests",
@@ -224,7 +225,6 @@ async def start_spiders(database_manager: DatabaseManager, thread_number: int):
         await browser_page.route("**/*", block_aggressively)
         robot_file_parser = urllib.robotparser.RobotFileParser()
 
-        # TODO: maybe add an additional stop condition.
         while any(threads_status.values()):
             frontier_page = await database_manager.pop_frontier()
             if frontier_page is not None:
