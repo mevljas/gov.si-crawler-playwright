@@ -131,12 +131,12 @@ class DatabaseManager:
 
             logger.debug('Added links to the frontier.')
 
-    async def save_page(self, page_id: int, status: int, site_id: int, html: str = None, html_hash: str = None,
-                        page_type_code: str = 'HTML'):
+    async def update_page(self, page_id: int, status: int, site_id: int, html: str = None, html_hash: str = None,
+                          page_type_code: str = 'HTML'):
         """
-        Saved a visited page to the database.
+        Updates a visited page in the database.
         """
-        logger.debug('Saving page to the database.')
+        logger.debug('Updating page in the database.')
         async with self.async_session_factory()() as session:
             await session.execute(
                 update(Page).where(Page.id == page_id).values(page_type_code=page_type_code,
@@ -147,15 +147,35 @@ class DatabaseManager:
                                                               html_content_hash=html_hash))
             await session.commit()
 
-            logger.debug('Page saved to the database.')
+            logger.debug('Page updated.')
 
-    async def create_redirect_page(self, url: str, site_id: int, page_type_code: str = 'REDIRECT') -> int:
+    async def update_page_redirect(self,
+                                   page_id: int,
+                                   site_id: int,
+                                   page_type_code: str = 'REDIRECT',
+                                   status: int = 301):
         """
-        Creates an empty page with only the url and site_id, which is then filled in later. 
+        Makes a page a redirect page.
+        This is used for saving redirects.
+        """
+        logger.debug('Updating redirect page in the database.')
+        async with self.async_session_factory()() as session:
+            await session.execute(
+                update(Page).where(Page.id == page_id).values(page_type_code=page_type_code,
+                                                              http_status_code=status,
+                                                              site_id=site_id,
+                                                              accessed_time=datetime.now()))
+            await session.commit()
+
+            logger.debug('Page updated.')
+
+    async def create_new_page(self, url: str, site_id: int, page_type_code: str = 'FRONTIER') -> int:
+        """
+        Creates an empty page with only the url and site_id, which is then filled in later.
         This is used for on-the-fly page saves, usually they would and should be created when adding to frontier.
         Return the page's id.
         """
-        logger.debug('Saving redirect page to the database.')
+        logger.debug('Saving new page to the database.')
         page_id: int
         async with self.async_session_factory()() as session:
             try:

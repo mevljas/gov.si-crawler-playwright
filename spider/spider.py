@@ -113,22 +113,23 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
         logger.info(
             f'Current watched url {current_url} differs from actual browser url {page_url}. Redirect happened. Reassigning url.')
         redirected = True
-        current_url = page_url
-    else:
-        logger.debug(f'Current watched url matches the actual browser url (i.e. no redirects happened).')
+        # current_url = page_url
 
-    # Check if page redirected
-    if redirected:
         # Save original page as a redirect
-        await database_manager.save_page(page_id=page_id,
-                                         status=301,
-                                         site_id=site_id)
+        await database_manager.update_page_redirect(page_id=page_id, site_id=site_id)
         # Create new page to act as the current one
-        new_page_id = await database_manager.create_redirect_page(url=current_url, site_id=site_id)
+        new_page_id = await database_manager.create_new_page(url=page_url, site_id=site_id)
 
         # link previous page to the new redirected page.
         await database_manager.add_page_link(original_page_id=new_page_id, duplicate_page_id=page_id)
-        page_id = new_page_id
+        # page_id = new_page_id
+        logger.info(f'Crawling url {current_url} finished, because of a redirect to {page_url}.')
+        return
+    else:
+        logger.debug(f'Current watched url matches the actual browser url (i.e. no redirects happened).')
+
+
+
 
     if html:
         # Generate html hash
@@ -138,10 +139,10 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
         page_collision = await database_manager.check_pages_hash_collision(html_hash=html_hash)
         if page_collision is not None:
             original_page_id, original_site_id = page_collision
-            await database_manager.save_page(page_id=page_id,
-                                             status=status,
-                                             site_id=original_site_id,
-                                             page_type_code='DUPLICATE')
+            await database_manager.update_page(page_id=page_id,
+                                               status=status,
+                                               site_id=original_site_id,
+                                               page_type_code='DUPLICATE')
             await database_manager.add_page_link(original_page_id=original_page_id, duplicate_page_id=page_id)
             logger.info(f'Url {current_url} is a duplicate of another page.')
             return
@@ -161,11 +162,11 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
 
         # SAVE PAGE
         # Save page to the database
-        await database_manager.save_page(page_id=page_id,
-                                         html=html,
-                                         status=status,
-                                         site_id=site_id,
-                                         html_hash=html_hash)
+        await database_manager.update_page(page_id=page_id,
+                                           html=html,
+                                           status=status,
+                                           site_id=site_id,
+                                           html_hash=html_hash)
 
         # SAVE PAGE IMAGES
         # images saved here because of potential page_id change
@@ -195,7 +196,7 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
         # Check page content type for binary file
         if data_type is not None:
             # Save page as binary
-            await database_manager.save_page(site_id=site_id, page_id=page_id, status=status, page_type_code='BINARY')
+            await database_manager.update_page(site_id=site_id, page_id=page_id, status=status, page_type_code='BINARY')
             # Save page data
             await database_manager.save_page_data(
                 page_data_entries=[PageData(page_id=page_id, data_type_code=data_type)])
