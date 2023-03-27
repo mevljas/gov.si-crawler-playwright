@@ -29,7 +29,7 @@ class Site(Base):
     __tablename__ = 'site'
 
     id = Column(Integer, primary_key=True)
-    domain = Column(String(500))
+    domain = Column(String(500), unique=True)
     robots_content = Column(Text)
     sitemap_content = Column(Text)
 

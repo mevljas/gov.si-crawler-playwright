@@ -7,17 +7,17 @@ from logger.logger import logger
 
 
 def save_site_available_time(
-        robot_delay: int,
+        delay: int,
         domain: str,
         ip: str):
     """
     Save the time in seconds when the domain and ip will be available for crawling again.
     """
-    logger.debug(f'Saving delay {robot_delay} seconds for the domain {domain} and ip {ip}.')
+    logger.debug(f'Saving delay {delay} seconds for the domain {domain} and ip {ip}.')
     # read or write the shared variable
-    domain_available_times[domain] = time() + robot_delay
+    domain_available_times[domain] = time() + delay
     if ip is not None:
-        ip_available_times[ip] = time() + robot_delay
+        ip_available_times[ip] = time() + delay
 
 
 def get_site_wait_time(domain: str, ip: str):
@@ -44,12 +44,13 @@ async def refresh_site_available_time(
     Waits the required delay time and refreshes
     the wait time in seconds for the domain and ip to be available for crawling again.
     """
-    robot_delay = int(robot_delay) if robot_delay is not None else DEFAULT_DOMAIN_DELAY
+    logger.debug(f'Robots.txt delay is {robot_delay}.')
+    required_delay = int(robot_delay) if robot_delay is not None else DEFAULT_DOMAIN_DELAY
     # acquire the lock
     with lock:
         wait_time = get_site_wait_time(domain=domain, ip=ip)
         wait_time = wait_time if wait_time > 0 else 0
-        save_site_available_time(domain=domain, ip=ip, robot_delay=robot_delay + wait_time)
+        save_site_available_time(domain=domain, ip=ip, delay=required_delay + wait_time)
     if wait_time > 0:
         logger.debug(f'Required waiting time for the domain {domain} and ip {ip} is {wait_time} seconds.')
         await asyncio.sleep(wait_time)

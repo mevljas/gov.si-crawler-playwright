@@ -131,12 +131,12 @@ class DatabaseManager:
 
             logger.debug('Added links to the frontier.')
 
-    async def save_page(self, page_id: int, status: int, site_id: int, html: str = None, html_hash: str = None,
-                        page_type_code: str = 'HTML'):
+    async def update_page(self, page_id: int, status: int, site_id: int, html: str = None, html_hash: str = None,
+                          page_type_code: str = 'HTML'):
         """
-        Saved a visited page to the database.
+        Updates a visited page in the database.
         """
-        logger.debug('Saving page to the database.')
+        logger.debug('Updating page in the database.')
         async with self.async_session_factory()() as session:
             await session.execute(
                 update(Page).where(Page.id == page_id).values(page_type_code=page_type_code,
@@ -147,15 +147,35 @@ class DatabaseManager:
                                                               html_content_hash=html_hash))
             await session.commit()
 
-            logger.debug('Page saved to the database.')
+            logger.debug('Page updated.')
 
-    async def create_redirect_page(self, url: str, site_id: int, page_type_code: str = 'REDIRECT') -> int:
+    async def update_page_redirect(self,
+                                   page_id: int,
+                                   site_id: int,
+                                   page_type_code: str = 'REDIRECT',
+                                   status: int = 301):
         """
-        Creates an empty page with only the url and site_id, which is then filled in later. 
+        Makes a page a redirect page.
+        This is used for saving redirects.
+        """
+        logger.debug('Updating redirect page in the database.')
+        async with self.async_session_factory()() as session:
+            await session.execute(
+                update(Page).where(Page.id == page_id).values(page_type_code=page_type_code,
+                                                              http_status_code=status,
+                                                              site_id=site_id,
+                                                              accessed_time=datetime.now()))
+            await session.commit()
+
+            logger.debug('Page updated.')
+
+    async def create_new_page(self, url: str, site_id: int, page_type_code: str = 'FRONTIER') -> int:
+        """
+        Creates an empty page with only the url and site_id, which is then filled in later.
         This is used for on-the-fly page saves, usually they would and should be created when adding to frontier.
         Return the page's id.
         """
-        logger.debug('Saving redirect page to the database.')
+        logger.debug('Saving new page to the database.')
         page_id: int
         async with self.async_session_factory()() as session:
             try:
@@ -175,27 +195,36 @@ class DatabaseManager:
 
     async def save_site(self, domain: str, robots_content: str, sitemap_content) -> int:
         """
-        Saved a visited site to the database.
-        Return a site's id.
+        Saves a visited site to the database.
+        Returns a site's id.
         """
         logger.debug('Saving site to the database.')
         site_id: int
+
+        # Remove www.
+        domain = domain.replace('www.', '')
         async with self.async_session_factory()() as session:
-            # TODO: handle duplicates
-            new_site: Site = Site(domain=domain, robots_content=robots_content, sitemap_content=sitemap_content)
-            session.add(new_site)
-            await session.flush()
-            site_id = new_site.id
-            await session.commit()
-
-            logger.debug(f'Site saved to the database with an id {site_id}.')
-
+            try:
+                site: Site = Site(domain=domain, robots_content=robots_content, sitemap_content=sitemap_content)
+                session.add(site)
+                await session.flush()
+                site_id = site.id
+                await session.commit()
+                logger.debug(f'Site saved to the database with an id {site_id}.')
+            except exc.IntegrityError:
+                await session.rollback()
+                logger.debug('Adding site failed because it already exists in the database.')
+                site: Site = (await session.execute(
+                    select(Site).where(Site.domain == domain).limit(1))).scalars().first()
+                site_id = site.id
             return site_id
 
     async def get_site(self, domain: str) -> (int, str, str, str):
         """
         Gets the site from the database.
         """
+        # Remove www.
+        domain = domain.replace('www.', '')
         logger.debug('Getting the site from the database.')
         async with self.async_session_factory()() as session:
             result: Result = await session.execute(select(Site).where(Site.domain == domain))
