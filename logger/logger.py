@@ -140,7 +140,7 @@ def init_logging():
     console_handler.setFormatter(colored_formatter)
     root_logger.addHandler(console_handler)
 
-    file_handler = logging.FileHandler("app.log")
+    file_handler = logging.FileHandler(filename="app.log", encoding='utf-8', mode='w')
     file_level = "DEBUG"
     file_handler.setLevel(file_level)
     file_format = "[%(asctime)s %(threadName)s, %(levelname)s] %(message)s"
