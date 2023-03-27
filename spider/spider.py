@@ -238,7 +238,6 @@ async def start_spiders(database_manager: DatabaseManager, thread_number: int):
                                     page_id=frontier_id)
                 except Exception as e:
                     logger.critical(f'Crawling url {url} failed with an error {e}.')
-                    # TODO: save status code
                     await database_manager.mark_page_as_failed(page_id=frontier_id)
                 logger.info(f'Visited {await database_manager.get_html_pages_count()} unique HTML pages.')
                 logger.info(f'Frontier contains {len(await database_manager.get_frontier_links())} unique links.')
