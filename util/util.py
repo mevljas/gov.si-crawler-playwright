@@ -75,11 +75,11 @@ def check_if_binary(url: str) -> (bool, str):
     """
     Check if url leads to binary file
     """
-    for ext in binary_file_extensions:
-        if ext in url:
+    for extension in binary_file_extensions:
+        if url.endswith(extension):
             logger.debug(f'Url {url} leads to binary file.')
-            dt: str = extension_to_datatype(ext)
-            return True, dt
+            data_type: str = extension_to_datatype(extension)
+            return True, data_type
 
     logger.debug(f'Url {url} does not lead to a binary file.')
     return False, None

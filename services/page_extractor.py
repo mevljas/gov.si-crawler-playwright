@@ -1,6 +1,6 @@
 import os
 from datetime import datetime
-from mimetypes import guess_extension, guess_type
+from mimetypes import guess_extension
 from urllib.parse import ParseResult
 from urllib.parse import urlparse
 from urllib.robotparser import RobotFileParser
@@ -50,9 +50,10 @@ async def get_page(url: str, page: Page, domain: str, ip: str, robot_delay: str)
                     logger.debug(f'Download successful.')
                     extension = guess_extension(document.headers.get('content-type', '').split(';')[0])
                     data_type: str = extension_to_datatype(extension)
-                    return page.url, None, data_type, status
+                    if data_type != 'HTML':
+                        return page.url, None, data_type, status
                 except Exception as e2:
-                    logger.warning(f'Failed to get document type with an error {e2}.')
+                    logger.debug(f'Failed to get document type with an error {e2}.')
             case _:
                 raise e
 
@@ -77,11 +78,11 @@ def find_images(beautiful_soup: BeautifulSoup) -> set[Image]:
         filename, extension = os.path.splitext(os.path.basename(path))
 
         # Parse the URL and check if it has a valid file extension
-        if extension.lower() not in image_extensions:
+        if extension is None or extension.lower() not in image_extensions:
             continue
 
-        (mime, _) = guess_type(src)
-        image: Image = Image(filename=filename, content_type=mime, accessed_time=accessed_time)
+        content_type = extension[1:].upper()
+        image: Image = Image(filename=filename, content_type=content_type, accessed_time=accessed_time)
         images.add(image)
     return images
 

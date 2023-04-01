@@ -94,7 +94,7 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
             case 'net::ERR_CONNECTION_RESET':
                 logger.debug(f'Opening page {current_url} failed with an error {e}.')
             case 'net::ERR_ABORTED':
-                logger.warning(f'Opening page {current_url} failed with an error {e}.')
+                logger.debug(f'Opening page {current_url} failed with an error {e}.')
             case 'net::ERR_EMPTY_RESPONSE':
                 logger.debug(f'Opening page {current_url} failed with an error {e}.')
             case _:
@@ -104,19 +104,17 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
 
     # Convert actual page url to canonical form
     page_url = ''.join(canonicalize({url}))
-    redirected = False
     # Check if URL is a redirect by matching current_url and returned url and the reassigning
     # Only checking HTTP response status for direct is most likely not enough since there could be a redirect with JS
     if current_url != page_url:
         # Page saves happen later in the execution, the important thing is the set the proper context (i.e. the url)
         # for all the following operations
         logger.info(
-            f'Current watched url {current_url} differs from actual browser url {page_url}. Redirect happened. Reassigning url.')
-        redirected = True
-        # current_url = page_url
+            f'Current watched url {current_url} differs from actual browser url {page_url}. Redirect happened.')
 
         # Save original page as a redirect
         await database_manager.update_page_redirect(page_id=page_id, site_id=site_id)
+
         # Create new page to act as the current one
         new_page_id = await database_manager.create_new_page(url=page_url, site_id=site_id)
 
@@ -140,6 +138,7 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
                                                status=status,
                                                site_id=original_site_id,
                                                page_type_code='DUPLICATE')
+            # link duplicate page to the original one.
             await database_manager.add_page_link(to_page_id=original_page_id, from_page_id=page_id)
             logger.info(f'Url {current_url} is a duplicate of another page.')
             return
@@ -166,13 +165,11 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
                                            html_hash=html_hash)
 
         # SAVE PAGE IMAGES
-        # images saved here because of potential page_id change
         for image in page_images:
             image.page_id = page_id
         await database_manager.save_images(images=list(page_images))
 
         # SAVE PAGE DATA
-        # page data saved here because of potential page_id change
         for page_data in page_data_entries:
             page_data.page_id = page_id
         if len(page_data_entries) > 0:
@@ -187,7 +184,7 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
             link_id = await database_manager.add_to_frontier(link=link)
             if link_id is not None:
                 # link previous page to the new link page.
-                await database_manager.add_page_link(to_page_id=page_id, from_page_id=link_id)
+                await database_manager.add_page_link(to_page_id=link_id, from_page_id=page_id)
 
         logger.info(f'Crawling url {current_url} finished.')
     else:
@@ -243,12 +240,12 @@ async def start_spiders(database_manager: DatabaseManager, thread_number: int):
                 except Exception as e:
                     logger.critical(f'Crawling url {url} failed with an error {e}.')
                     await database_manager.mark_page_as_failed(page_id=frontier_id)
-                logger.info(f'Visited {await database_manager.get_html_pages_count()} unique HTML pages.')
-                logger.info(f'Frontier contains {len(await database_manager.get_frontier_links())} unique links.')
+                # logger.info(f'Visited {await database_manager.get_html_pages_count()} unique HTML pages.')
+                # logger.info(f'Frontier contains {len(await database_manager.get_frontier_links())} unique links.')
             else:
                 threads_status[thread_number] = False
                 logger.info('Sleeping.')
-                await asyncio.sleep(30)
+                await asyncio.sleep(60)
 
         await browser.close()
     logger.info(f'Thread {thread_number} finished.')
