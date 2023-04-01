@@ -35,15 +35,9 @@ DEFAULT_DOMAIN_DELAY = 5  # seconds
 # Resource types that will be blocked.
 excluded_resource_types = ["image", "font", "media"]
 
+# Supported binary extensions
 image_extensions = ['.jpg', '.jpeg', '.jfif', '.pjpeg', '.pjp', '.png', '.apng', '.avif', '.gif', '.webp', '.svg',
                     '.eps', '.pdf', '.ico', '.cur', '.tif', '.tiff', '.bmp']
-binary_file_extensions = ['.pdf', '.doc', '.docx', '.ppt', '.pptx', '.zip']
-binary_file_mime_dict = {
-    'application/pdf': '.pdf',
-    'application/msword': '.doc',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
-    'application/vnd.ms-powerpoint': '.ppt',
-    'application/vnd.openxmlformats-officedocument.presentationml.presentation': '.pptx',
-}
+binary_file_extensions = ['.pdf', '.doc', '.docx', '.ppt', '.pptx', '.zip', '.rar', '.xlsx', 'xlsm']
 # Page timeout in milliseconds
 PAGE_WAIT_TIMEOUT = 20000
