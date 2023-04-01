@@ -109,7 +109,7 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
     if current_url != page_url:
         # Page saves happen later in the execution, the important thing is the set the proper context (i.e. the url)
         # for all the following operations
-        logger.info(
+        logger.debug(
             f'Current watched url {current_url} differs from actual browser url {page_url}. Redirect happened.')
 
         # Save original page as a redirect
@@ -121,7 +121,7 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
         # link previous page to the new redirected page.
         await database_manager.add_page_link(to_page_id=new_page_id, from_page_id=page_id)
         # page_id = new_page_id
-        logger.info(f'Crawling url {current_url} finished, because of a redirect to {page_url}.')
+        logger.info(f'Crawling url {current_url} finished with a redirect to {page_url}.')
         return
     else:
         logger.debug(f'Current watched url matches the actual browser url (i.e. no redirects happened).')
