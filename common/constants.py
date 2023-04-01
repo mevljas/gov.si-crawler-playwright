@@ -40,4 +40,4 @@ image_extensions = ['.jpg', '.jpeg', '.jfif', '.pjpeg', '.pjp', '.png', '.apng',
                     '.eps', '.pdf', '.ico', '.cur', '.tif', '.tiff', '.bmp']
 binary_file_extensions = ['.pdf', '.doc', '.docx', '.ppt', '.pptx', '.zip', '.rar', '.xlsx', 'xlsm']
 # Page timeout in milliseconds
-PAGE_WAIT_TIMEOUT = 20000
+PAGE_WAIT_TIMEOUT = 10000
