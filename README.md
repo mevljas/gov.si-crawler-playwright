@@ -1,4 +1,4 @@
-# ieps-assignment-1
+# Gov.si crawler playwright
 A standalone crawler that crawls only .gov.si web sites using [Playwright](https://playwright.dev/python/). 
 
 ## Project setup
