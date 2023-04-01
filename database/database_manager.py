@@ -115,21 +115,24 @@ class DatabaseManager:
 
             logger.debug('Link removed from the frontier.')
 
-    async def add_to_frontier(self, links: set[str]):
+    async def add_to_frontier(self, link: str):
         """
-        Adds new links to the frontier.
+        Adds a new link to the frontier.
         """
-        logger.debug('Adding links to the frontier.')
+        logger.debug('Adding a link to the frontier.')
         async with self.async_session_factory()() as session:
-            for link in links:
-                try:
-                    session.add(Page(url=link, page_type_code='FRONTIER'))
-                    await session.commit()
-                except exc.IntegrityError:
-                    await session.rollback()
-                    logger.debug('Adding links failed, some are already in the frontier.')
-
-            logger.debug('Added links to the frontier.')
+            try:
+                page: Page = Page(url=link, page_type_code='FRONTIER')
+                session.add(page)
+                await session.flush()
+                page_id = page.id
+                await session.commit()
+                logger.debug('Added link to the frontier.')
+                return page_id
+            except exc.IntegrityError:
+                await session.rollback()
+                logger.debug('Adding link failed because its already in the frontier.')
+                return None
 
     async def update_page(self, page_id: int, status: int, site_id: int, html: str = None, html_hash: str = None,
                           page_type_code: str = 'HTML'):
@@ -257,13 +260,13 @@ class DatabaseManager:
 
             return None
 
-    async def add_page_link(self, original_page_id: int, duplicate_page_id: int):
+    async def add_page_link(self, to_page_id: int, from_page_id: int):
         """
         Adds a new page duplicate link.
         """
         logger.debug('Adding a new page duplicate link.')
         async with self.async_session_factory()() as session:
-            session.add(Link(from_page=duplicate_page_id, to_page=original_page_id))
+            session.add(Link(from_page=from_page_id, to_page=to_page_id))
             await session.commit()
 
             logger.debug('Duplicate link added successfully.')

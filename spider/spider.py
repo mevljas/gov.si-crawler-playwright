@@ -121,7 +121,7 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
         new_page_id = await database_manager.create_new_page(url=page_url, site_id=site_id)
 
         # link previous page to the new redirected page.
-        await database_manager.add_page_link(original_page_id=new_page_id, duplicate_page_id=page_id)
+        await database_manager.add_page_link(to_page_id=new_page_id, from_page_id=page_id)
         # page_id = new_page_id
         logger.info(f'Crawling url {current_url} finished, because of a redirect to {page_url}.')
         return
@@ -140,7 +140,7 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
                                                status=status,
                                                site_id=original_site_id,
                                                page_type_code='DUPLICATE')
-            await database_manager.add_page_link(original_page_id=original_page_id, duplicate_page_id=page_id)
+            await database_manager.add_page_link(to_page_id=original_page_id, from_page_id=page_id)
             logger.info(f'Url {current_url} is a duplicate of another page.')
             return
 
@@ -183,7 +183,11 @@ async def crawl_url(current_url: str, browser_page: Page, robot_file_parser: Rob
         new_links = page_urls.union(sitemap_urls)
         logger.debug(f'Got {len(new_links)} new links.')
         # Add new urls to the frontier
-        await database_manager.add_to_frontier(new_links)
+        for link in new_links:
+            link_id = await database_manager.add_to_frontier(link=link)
+            if link_id is not None:
+                # link previous page to the new link page.
+                await database_manager.add_page_link(to_page_id=page_id, from_page_id=link_id)
 
         logger.info(f'Crawling url {current_url} finished.')
     else:
