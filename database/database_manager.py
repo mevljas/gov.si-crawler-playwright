@@ -299,7 +299,7 @@ class DatabaseManager:
                     session.add(page_data)
                     await session.commit()
 
-                logger.debug('Page data entries saved to the database.')
+            logger.debug('Page data entries saved to the database.')
 
     async def mark_page_as_failed(self, page_id: int, site_id: int = None):
         """
