@@ -38,6 +38,6 @@ excluded_resource_types = ["image", "font", "media"]
 # Supported binary extensions
 image_extensions = ['.jpg', '.jpeg', '.jfif', '.pjpeg', '.pjp', '.png', '.apng', '.avif', '.gif', '.webp', '.svg',
                     '.eps', '.pdf', '.ico', '.cur', '.tif', '.tiff', '.bmp']
-binary_file_extensions = ['.pdf', '.doc', '.docx', '.ppt', '.pptx', '.zip', '.rar', '.xlsx', 'xlsm']
+binary_file_extensions = ['.pdf', '.doc', '.docx', '.ppt', '.pptx', '.zip', '.rar', '.xlsx', '.xlsm']
 # Page timeout in milliseconds
 PAGE_WAIT_TIMEOUT = 20000
