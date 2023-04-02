@@ -47,10 +47,10 @@ async def seed_default(async_session_factory: async_sessionmaker[AsyncSession]):
                 PageType(code='FAILED'),
                 PageType(code='CRAWLING'),
                 PageType(code='REDIRECT'),
-                Page(url='https://gov.si', page_type_code='FRONTIER'),
-                Page(url='https://evem.gov.si', page_type_code='FRONTIER'),
-                Page(url='https://e-uprava.gov.si', page_type_code='FRONTIER'),
-                Page(url='https://e-prostor.gov.si', page_type_code='FRONTIER')
+                Page(url='https://gov.si/', page_type_code='FRONTIER'),
+                Page(url='https://evem.gov.si/', page_type_code='FRONTIER'),
+                Page(url='https://e-uprava.gov.si/', page_type_code='FRONTIER'),
+                Page(url='https://e-prostor.gov.si/', page_type_code='FRONTIER')
             ]
         )
         await session.commit()
