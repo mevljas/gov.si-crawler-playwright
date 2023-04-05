@@ -134,7 +134,7 @@ class DatabaseManager:
                 logger.debug('Adding link failed because its already in the frontier.')
                 return None
 
-    async def update_page(self, page_id: int, status: int, site_id: int, html: str = None, html_hash: str = None,
+    async def update_page(self, page_id: int, status: int, site_id: int, accessed_time: datetime, html: str = None, html_hash: str = None,
                           page_type_code: str = 'HTML'):
         """
         Updates a visited page in the database.
@@ -146,8 +146,8 @@ class DatabaseManager:
                                                               html_content=html,
                                                               http_status_code=status,
                                                               site_id=site_id,
-                                                              accessed_time=datetime.now(),
-                                                              html_content_hash=html_hash))
+                                                              html_content_hash=html_hash,
+                                                              accessed_time=accessed_time))
             await session.commit()
 
             logger.debug('Page updated.')
@@ -155,6 +155,7 @@ class DatabaseManager:
     async def update_page_redirect(self,
                                    page_id: int,
                                    site_id: int,
+                                   accessed_time: datetime,
                                    page_type_code: str = 'REDIRECT',
                                    status: int = 301):
         """
@@ -167,7 +168,7 @@ class DatabaseManager:
                 update(Page).where(Page.id == page_id).values(page_type_code=page_type_code,
                                                               http_status_code=status,
                                                               site_id=site_id,
-                                                              accessed_time=datetime.now()))
+                                                              accessed_time=accessed_time))
             await session.commit()
 
             logger.debug('Page updated.')

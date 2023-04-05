@@ -28,13 +28,14 @@ async def get_page(url: str, page: Page, domain: str, ip: str, robot_delay: str)
     await refresh_site_available_time(domain=domain,
                                       ip=ip,
                                       robot_delay=robot_delay)
+    accessed_time = datetime.now()
     logger.debug(f'Opening page {url}.')
     try:
         response = await page.goto(url=url, timeout=PAGE_WAIT_TIMEOUT)
         status = response.status
         html = await page.content()
         logger.debug(f'Response status is {status}.')
-        return page.url, html, None, status
+        return page.url, html, None, status, accessed_time
     except Exception as e:
         match str(e).split(' at ')[0]:
             case 'net::ERR_ABORTED':
@@ -44,6 +45,7 @@ async def get_page(url: str, page: Page, domain: str, ip: str, robot_delay: str)
                     # Wait required delay time
                     await refresh_site_available_time(domain=domain, ip=ip, robot_delay=robot_delay)
                     document = requests.get(url, verify=False, timeout=PAGE_WAIT_TIMEOUT)
+                    accessed_time = datetime.now()
                     status = document.status_code
                     if status != 200:
                         raise Exception(f'Status code is {status}.')
@@ -51,7 +53,7 @@ async def get_page(url: str, page: Page, domain: str, ip: str, robot_delay: str)
                     extension = guess_extension(document.headers.get('content-type', '').split(';')[0])
                     data_type: str = extension_to_datatype(extension)
                     if data_type != 'HTML':
-                        return page.url, None, data_type, status
+                        return page.url, None, data_type, status, accessed_time
                 except Exception as e2:
                     logger.debug(f'Failed to get document type with an error {e2}.')
             case _:

@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import urllib
+from datetime import datetime
 from urllib.parse import ParseResult, urlparse
 from urllib.robotparser import RobotFileParser
 
@@ -82,10 +83,11 @@ async def crawl_url(start_url: str, browser_page: Page, robot_file_parser: Robot
     page_urls = set()
     # Fetch page
     try:
-        (url, html, data_type, status) = await get_page(url=current_url, page=browser_page, domain=domain,
-                                                        ip=ip,
-                                                        robot_delay=robot_file_parser.crawl_delay(useragent=USER_AGENT))
-
+        (url, html, data_type, status, accessed_time) = await get_page(url=current_url, page=browser_page,
+                                                                       domain=domain,
+                                                                       ip=ip,
+                                                                       robot_delay=robot_file_parser.crawl_delay(
+                                                                           useragent=USER_AGENT))
         # Convert actual page url to canonical form
         page_url = ''.join(canonicalize({url}))
         # Check if URL is a redirect by matching current_url and returned url and the reassigning Only checking HTTP
@@ -97,7 +99,7 @@ async def crawl_url(start_url: str, browser_page: Page, robot_file_parser: Robot
                 f'Current watched url {current_url} differs from actual browser url {page_url}. Redirect happened.')
 
             # Save original page as a redirect
-            await database_manager.update_page_redirect(page_id=page_id, site_id=site_id)
+            await database_manager.update_page_redirect(page_id=page_id, site_id=site_id, accessed_time=accessed_time)
 
             # Create new page to act as the current one
             new_page_id = await database_manager.create_new_page(url=page_url, site_id=site_id)
@@ -121,7 +123,8 @@ async def crawl_url(start_url: str, browser_page: Page, robot_file_parser: Robot
                 await database_manager.update_page(page_id=page_id,
                                                    status=status,
                                                    site_id=original_site_id,
-                                                   page_type_code='DUPLICATE')
+                                                   page_type_code='DUPLICATE',
+                                                   accessed_time=accessed_time)
                 # link duplicate page to the original one.
                 await database_manager.add_page_link(to_page_id=original_page_id, from_page_id=page_id)
                 logger.info(f'Url {current_url} is a duplicate of another page.')
@@ -146,7 +149,8 @@ async def crawl_url(start_url: str, browser_page: Page, robot_file_parser: Robot
                                                    html=html,
                                                    status=status,
                                                    site_id=site_id,
-                                                   html_hash=html_hash)
+                                                   html_hash=html_hash,
+                                                   accessed_time=accessed_time)
 
                 # SAVE PAGE IMAGES
                 for image in page_images:
@@ -168,7 +172,8 @@ async def crawl_url(start_url: str, browser_page: Page, robot_file_parser: Robot
             if data_type is not None:
                 # Save page as binary
                 await database_manager.update_page(site_id=site_id, page_id=page_id, status=status,
-                                                   page_type_code='BINARY')
+                                                   page_type_code='BINARY',
+                                                   accessed_time=accessed_time)
                 # Save page data
                 await database_manager.save_page_data(
                     page_data_entries=[PageData(page_id=page_id, data_type_code=data_type)])
