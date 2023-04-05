@@ -134,7 +134,8 @@ class DatabaseManager:
                 logger.debug('Adding link failed because its already in the frontier.')
                 return None
 
-    async def update_page(self, page_id: int, status: int, site_id: int, accessed_time: datetime, html: str = None, html_hash: str = None,
+    async def update_page(self, page_id: int, status: int, site_id: int, accessed_time: datetime, html: str = None,
+                          html_hash: str = None,
                           page_type_code: str = 'HTML'):
         """
         Updates a visited page in the database.
@@ -267,10 +268,13 @@ class DatabaseManager:
         """
         logger.debug('Adding a new page duplicate link.')
         async with self.async_session_factory()() as session:
-            session.add(Link(from_page=from_page_id, to_page=to_page_id))
-            await session.commit()
+            try:
+                session.add(Link(from_page=from_page_id, to_page=to_page_id))
+                await session.commit()
 
-            logger.debug('Duplicate link added successfully.')
+                logger.debug('Duplicate link added successfully.')
+            except exc.IntegrityError:
+                logger.debug('Adding duplicate link failed because it already exists in the database.')
 
     async def save_images(self, images: list[Image]):
         """
