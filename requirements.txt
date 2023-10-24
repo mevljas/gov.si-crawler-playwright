@@ -19,6 +19,6 @@ soupsieve==2.4
 SQLAlchemy==2.0.4
 typing_extensions==4.5.0
 url-normalize==1.4.3
-urllib3==1.26.17
+urllib3==1.26.18
 virtualenv==20.21.0
 w3lib==2.1.1
