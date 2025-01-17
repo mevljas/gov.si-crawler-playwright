@@ -20,5 +20,5 @@ SQLAlchemy==2.0.4
 typing_extensions==4.5.0
 url-normalize==1.4.3
 urllib3==1.26.19
-virtualenv==20.21.0
+virtualenv==20.26.6
 w3lib==2.1.1
